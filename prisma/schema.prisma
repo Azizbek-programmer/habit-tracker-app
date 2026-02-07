@@ -1,0 +1,356 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+} 
+
+////////////////////
+/// ENUMS
+////////////////////
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum TaskRepeatType {
+  ONCE
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum TaskLogStatus {
+  DONE
+  MISSED
+  SKIPPED
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  ELITE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum NotificationType {
+  TASK_REMINDER
+  HABIT_REMINDER
+  SYSTEM
+}
+
+////////////////////
+/// USER & AUTH
+////////////////////
+
+model User {
+  id                    String   @id @db.Char(36)
+  fullName              String   @db.VarChar(100)
+  username              String   @unique @db.VarChar(50)
+  email                 String   @unique @db.VarChar(150)
+  phoneNumber           String?  @db.VarChar(20)
+  password              String   @db.Text
+  avatarUrl             String?
+  role                  UserRole @default(USER)
+  status                UserStatus @default(ACTIVE)
+  timezone              String?  @db.VarChar(50)
+  locale                String?  @db.VarChar(10)
+  theme                 String?  @db.VarChar(10)
+  weekStartDay          String?  @db.VarChar(10)
+  onboardingCompleted   Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  otpCode            String?
+  otpExpiresAt       DateTime?
+  hashedRefreshToken    String?
+  birthDate             BigInt
+  lastLoginAt           DateTime?
+  lastActiveAt          DateTime?
+  createdAt             DateTime @default(now())
+
+  // Relations
+  tasks                 Task[]
+  habits                Habit[]
+  goals                 Goal[]
+  taskLogs              TaskLog[]
+  habitLogs             HabitLog[]
+  analyticsDaily        UserAnalyticsDaily[]
+  analyticsMonthly      UserAnalyticsMonthly[]
+  calendarDays          CalendarDay[]
+  sessions              UserTimeSession[]
+  notifications         UserNotification[]
+  subscription          Subscription?
+  payments              Payment[]
+  activityLogs          UserActivityLog[]
+
+  @@map("users")
+}
+
+////////////////////
+/// TASK SYSTEM
+////////////////////
+
+model Task {
+  id                  String   @id @db.Char(36)
+  userId              String   @db.Char(36)
+  title               String   @db.VarChar(200)
+  description         String?  @db.Text
+  type                String?  @db.VarChar(20)
+  priority            String?  @db.VarChar(10)
+  status              String?  @db.VarChar(15)
+  repeatType          TaskRepeatType @default(ONCE)
+  repeatConfig         Json?
+  startAt             DateTime?
+  endAt               DateTime?
+  dueDate             DateTime?
+  estimatedDuration   Int?
+  actualDuration      Int?
+  energyLevelRequired String?
+  context             String?
+  completionRate      Float?
+  archivedAt          DateTime?
+  createdAt           DateTime @default(now())
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs        TaskLog[]
+  goalTasks   GoalTask[]
+
+  @@map("tasks")
+}
+
+model TaskLog {
+  id         String        @id @db.Char(36)
+  taskId    String        @db.Char(36)
+  userId    String        @db.Char(36)
+  date       DateTime
+  status     TaskLogStatus
+  timeSpent  Int?
+  note       String?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("task_logs")
+}
+
+////////////////////
+/// HABIT SYSTEM
+////////////////////
+
+model Habit {
+  id              String   @id @db.Char(36)
+  userId          String   @db.Char(36)
+  title           String   @db.VarChar(150)
+  frequency       String?
+  targetDays      Int?
+  goalCount       Int?
+  currentStreak   Int @default(0)
+  bestStreak      Int @default(0)
+  reminderTime    String?
+  motivationText  String?
+  createdAt       DateTime @default(now())
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs   HabitLog[]
+  insight HabitInsight?
+
+  @@map("habits")
+}
+
+model HabitLog {
+  id        String   @id @db.Char(36)
+  habitId   String   @db.Char(36)
+  userId    String   @db.Char(36)
+  logDate   DateTime
+  status    String?
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("habit_logs")
+}
+
+model HabitInsight {
+  id                String @id @db.Char(36)
+  habitId           String @unique @db.Char(36)
+  weekSuccessRate   Int?
+  monthSuccessRate  Int?
+  dropReason        String?
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@map("habit_insights")
+}
+
+////////////////////
+/// GOALS
+////////////////////
+
+model Goal {
+  id        String   @id @db.Char(36)
+  userId    String   @db.Char(36)
+  title     String   @db.VarChar(200)
+  type      String?
+  startDate DateTime?
+  endDate   DateTime?
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalTasks GoalTask[]
+
+  @@map("goals")
+}
+
+model GoalTask {
+  goalId String @db.Char(36)
+  taskId String @db.Char(36)
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([goalId, taskId])
+  @@map("goal_tasks")
+}
+
+////////////////////
+/// TIME & CALENDAR
+////////////////////
+
+model UserTimeSession {
+  id              String   @id @db.Char(36)
+  userId          String   @db.Char(36)
+  sessionStart    DateTime
+  sessionEnd      DateTime?
+  activeDuration  Int?
+  idleDuration    Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_time_sessions")
+}
+
+model CalendarDay {
+  id              String   @id @db.Char(36)
+  userId          String   @db.Char(36)
+  date            DateTime
+  completedTasks  Int?
+  missedTasks     Int?
+  habitScore      Int?
+  moodScore       Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("calendar_days")
+}
+
+////////////////////
+/// ANALYTICS
+////////////////////
+
+model UserAnalyticsDaily {
+  id               String   @id @db.Char(36)
+  userId           String   @db.Char(36)
+  date             DateTime
+  focusScore       Int?
+  disciplineScore  Int?
+  consistencyScore Int?
+  burnoutRisk      Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_analytics_daily")
+}
+
+model UserAnalyticsMonthly {
+  id                  String   @id @db.Char(36)
+  userId              String   @db.Char(36)
+  month               String
+  productivityTrend   String?
+  habitStability      Int?
+  bestDayOfWeek       String?
+  worstDayOfWeek      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_analytics_monthly")
+}
+
+////////////////////
+/// MONETIZATION
+////////////////////
+
+model Subscription {
+  id          String           @id @db.Char(36)
+  userId      String           @unique @db.Char(36)
+  plan        SubscriptionPlan @default(FREE)
+  startsAt    DateTime
+  endsAt      DateTime?
+  autoRenew   Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id            String        @id @db.Char(36)
+  userId        String        @db.Char(36)
+  amount        Float
+  currency      String
+  provider      String
+  status        PaymentStatus
+  transactionId String
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+////////////////////
+/// NOTIFICATIONS & LOGS
+////////////////////
+
+model UserNotification {
+  id        String           @id @db.Char(36)
+  userId    String           @db.Char(36)
+  type      NotificationType
+  schedule  String?
+  enabled   Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notifications")
+}
+
+model UserActivityLog {
+  id        String   @id @db.Char(36)
+  userId    String   @db.Char(36)
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_activity_logs")
+}
