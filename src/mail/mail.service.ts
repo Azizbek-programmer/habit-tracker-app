@@ -19,14 +19,57 @@ export class MailService {
 
   async sendOtp(email: string, otp: string) {
     await this.transporter.sendMail({
-      from: process.env.MAIL_FROM,
+      from: `"My App" <${process.env.MAIL_FROM}>`,
       to: email,
-      subject: 'Your OTP Code',
+      subject: '🔐 Your OTP Verification Code',
       html: `
-        <h2>OTP Code</h2>
-        <p>Your verification code:</p>
-        <h1>${otp}</h1>
-        <p>This code is valid for 5 minutes.</p>
+      <div style="font-family: Arial, sans-serif; background-color: #f4f6f8; padding: 30px;">
+        <div style="max-width: 500px; margin: auto; background: #ffffff; border-radius: 10px; overflow: hidden;">
+          
+          <div style="background: #4f46e5; color: #ffffff; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">Email Verification</h1>
+          </div>
+
+          <div style="padding: 30px; color: #333;">
+            <p style="font-size: 16px;">
+              Assalomu alaykum 👋
+            </p>
+
+            <p style="font-size: 15px;">
+              Sizning tasdiqlash kodingiz (OTP) quyida keltirilgan:
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <span style="
+                display: inline-block;
+                font-size: 32px;
+                letter-spacing: 8px;
+                background: #f3f4f6;
+                padding: 15px 25px;
+                border-radius: 8px;
+                color: #111827;
+                font-weight: bold;
+              ">
+                ${otp}
+              </span>
+            </div>
+
+            <p style="font-size: 14px; color: #555;">
+              ⏰ Ushbu kod <b>5 daqiqa</b> davomida amal qiladi.
+            </p>
+
+            <p style="font-size: 14px; color: #555;">
+              Agar bu so‘rovni siz yubormagan bo‘lsangiz, iltimos ushbu xabarni e’tiborsiz qoldiring.
+            </p>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+
+            <p style="font-size: 13px; color: #888; text-align: center;">
+              © 2026 My App. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </div>
       `,
     });
   }

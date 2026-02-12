@@ -96,3 +96,409 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+
+
+
+
+============================================================================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Keling, senior level uchun ushbu schemani optimallashtirish bo'yicha bir nechta yondashuvlarni ko'rib chiqamiz.
+
+## Asosiy muammolar va yechimlar:
+
+### 1. **Ortiqcha analytics jadvallar**
+```prisma
+// ❌ Olib tashlash kerak
+model UserAnalyticsDaily { ... }
+model UserAnalyticsMonthly { ... }
+```
+
+**Sabab:** Analytics ma'lumotlarni runtime'da hisoblash yoki alohida analytics service'ga ko'chirish yaxshiroq. Database'da saqlash ortiqcha.
+
+### 2. **CalendarDay jadvali**
+```prisma
+// ❌ Olib tashlash kerak  
+model CalendarDay { ... }
+```
+
+**Sabab:** Bu ma'lumotlarni TaskLog va HabitLog'lardan query qilish orqali olish mumkin.
+
+### 3. **HabitInsight jadvali**
+```prisma
+// ❌ Olib tashlash kerak
+model HabitInsight { ... }
+```
+
+**Sabab:** Success rate'larni HabitLog'dan hisoblash mumkin. Computed data database'da saqlanmasligi kerak.
+
+### 4. **UserTimeSession jadvali**
+```prisma
+// ❌ Olib tashlash kerak
+model UserTimeSession { ... }
+```
+
+**Sabab:** Agar frontend'da user activity tracking kerak bo'lsa, buni Redis yoki analytics tool bilan hal qilish yaxshiroq.
+
+### 5. **UserActivityLog jadvali**
+```prisma
+// ❌ Olib tashlash kerak  
+model UserActivityLog { ... }
+```
+
+**Sabab:** Audit logging uchun alohida logging service (ELK, Datadog) ishlatish kerak.
+
+## Optimallashtirilgan schema:
+
+```prisma
+// Minimal, production-ready schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+////////////////////
+/// ENUMS
+////////////////////
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum TaskRepeatType {
+  ONCE
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum TaskLogStatus {
+  DONE
+  MISSED
+  SKIPPED
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  ELITE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum NotificationType {
+  TASK_REMINDER
+  HABIT_REMINDER
+  SYSTEM
+}
+
+////////////////////
+/// USER & AUTH
+////////////////////
+
+model User {
+  id                    String      @id @db.Char(36)
+  fullName              String      @db.VarChar(100)
+  username              String      @unique @db.VarChar(50)
+  email                 String      @unique @db.VarChar(150)
+  phoneNumber           String?     @db.VarChar(20)
+  password              String      @db.Text
+  avatarUrl             String?
+  role                  UserRole    @default(USER)
+  status                UserStatus  @default(ACTIVE)
+  timezone              String?     @db.VarChar(50)
+  locale                String?     @db.VarChar(10)
+  theme                 String?     @db.VarChar(10)
+  weekStartDay          String?     @db.VarChar(10)
+  onboardingCompleted   Boolean     @default(false)
+  isActive              Boolean     @default(true)
+  otpCode               String?
+  otpExpiresAt          DateTime?
+  hashedRefreshToken    String?
+  birthDate             BigInt
+  lastLoginAt           DateTime?
+  lastActiveAt          DateTime?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  // Relations
+  tasks                 Task[]
+  habits                Habit[]
+  goals                 Goal[]
+  taskLogs              TaskLog[]
+  habitLogs             HabitLog[]
+  notifications         UserNotification[]
+  subscription          Subscription?
+  payments              Payment[]
+
+  @@index([email])
+  @@index([username])
+  @@map("users")
+}
+
+////////////////////
+/// TASK SYSTEM
+////////////////////
+
+model Task {
+  id                  String          @id @db.Char(36)
+  userId              String          @db.Char(36)
+  title               String          @db.VarChar(200)
+  description         String?         @db.Text
+  type                String?         @db.VarChar(20)
+  priority            String?         @db.VarChar(10)
+  status              String?         @db.VarChar(15)
+  repeatType          TaskRepeatType  @default(ONCE)
+  repeatConfig        Json?
+  startAt             DateTime?
+  endAt               DateTime?
+  dueDate             DateTime?
+  estimatedDuration   Int?
+  actualDuration      Int?
+  energyLevelRequired String?
+  context             String?
+  completionRate      Float?
+  archivedAt          DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs        TaskLog[]
+  goalTasks   GoalTask[]
+
+  @@index([userId])
+  @@index([dueDate])
+  @@index([status])
+  @@map("tasks")
+}
+
+model TaskLog {
+  id         String        @id @db.Char(36)
+  taskId     String        @db.Char(36)
+  userId     String        @db.Char(36)
+  date       DateTime
+  status     TaskLogStatus
+  timeSpent  Int?
+  note       String?
+  createdAt  DateTime      @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@index([taskId])
+  @@map("task_logs")
+}
+
+////////////////////
+/// HABIT SYSTEM
+////////////////////
+
+model Habit {
+  id              String    @id @db.Char(36)
+  userId          String    @db.Char(36)
+  title           String    @db.VarChar(150)
+  frequency       String?
+  targetDays      Int?
+  goalCount       Int?
+  currentStreak   Int       @default(0)
+  bestStreak      Int       @default(0)
+  reminderTime    String?
+  motivationText  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs   HabitLog[]
+
+  @@index([userId])
+  @@map("habits")
+}
+
+model HabitLog {
+  id        String   @id @db.Char(36)
+  habitId   String   @db.Char(36)
+  userId    String   @db.Char(36)
+  logDate   DateTime
+  status    String?
+  createdAt DateTime @default(now())
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, logDate])
+  @@index([habitId])
+  @@map("habit_logs")
+}
+
+////////////////////
+/// GOALS
+////////////////////
+
+model Goal {
+  id        String    @id @db.Char(36)
+  userId    String    @db.Char(36)
+  title     String    @db.VarChar(200)
+  type      String?
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalTasks GoalTask[]
+
+  @@index([userId])
+  @@map("goals")
+}
+
+model GoalTask {
+  goalId String @db.Char(36)
+  taskId String @db.Char(36)
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([goalId, taskId])
+  @@map("goal_tasks")
+}
+
+////////////////////
+/// MONETIZATION
+////////////////////
+
+model Subscription {
+  id          String           @id @db.Char(36)
+  userId      String           @unique @db.Char(36)
+  plan        SubscriptionPlan @default(FREE)
+  startsAt    DateTime
+  endsAt      DateTime?
+  autoRenew   Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id            String        @id @db.Char(36)
+  userId        String        @db.Char(36)
+  amount        Float
+  currency      String        @db.VarChar(3)
+  provider      String        @db.VarChar(50)
+  status        PaymentStatus
+  transactionId String        @unique
+  createdAt     DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([transactionId])
+  @@map("payments")
+}
+
+////////////////////
+/// NOTIFICATIONS
+////////////////////
+
+model UserNotification {
+  id        String           @id @db.Char(36)
+  userId    String           @db.Char(36)
+  type      NotificationType
+  schedule  String?
+  enabled   Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_notifications")
+}
+```
+
+## Senior-level yaxshilanishlar:
+
+### ✅ Qo'shilgan:
+1. **`updatedAt`** - barcha asosiy modellarga
+2. **Indexes** - tez-tez query qilinadigan fieldlarga
+3. **Unique constraints** - data integrity uchun
+4. **Field validations** - VARCHAR length'lar
+
+### ❌ Olib tashlangan:
+1. UserAnalyticsDaily/Monthly
+2. CalendarDay
+3. HabitInsight
+4. UserTimeSession
+5. UserActivityLog
+
+### 💡 Qanday analytics olish:
+
+```typescript
+// Service layer'da analytics compute qilish
+class AnalyticsService {
+  async getDailyStats(userId: string, date: Date) {
+    const taskLogs = await prisma.taskLog.findMany({
+      where: { userId, date }
+    });
+    
+    const habitLogs = await prisma.habitLog.findMany({
+      where: { userId, logDate: date }
+    });
+    
+    return {
+      focusScore: this.calculateFocusScore(taskLogs),
+      completedTasks: taskLogs.filter(t => t.status === 'DONE').length,
+      habitScore: this.calculateHabitScore(habitLogs)
+    };
+  }
+}
+```
+
+Bu yondashuv senior level uchun to'g'riroq, chunki:
+- Database minimal va clean
+- Analytics on-demand hisoblanadi
+- Caching Redis'da bo'ladi
+- Scaling oson

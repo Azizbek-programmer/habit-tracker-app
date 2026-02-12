@@ -18,66 +18,74 @@ export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateUserDto) {
-  const lang = dto.locale ?? 'uz';
+    const lang = dto.locale ?? 'uz';
 
-  try {
-    // 1️⃣ birthDate tekshiruv
-    const birthTimestamp = BigInt(dto.birthDate);
-    const now = BigInt(Date.now());
+    try {
+      // 1️⃣ birthDate tekshiruv
+      const birthDate = BigInt(dto.birthDate);
+      const now = BigInt(Date.now());
 
-    if (birthTimestamp > now) {
-      throw new BadRequestException(MESSAGES.BIRTH_FUTURE[lang]);
+      if (birthDate > now) {
+        throw new BadRequestException(MESSAGES.BIRTH_FUTURE[lang]);
+      }
+
+      const minDate = BigInt(-2208988800000); // 1900-01-01
+      if (birthDate < minDate) {
+        throw new BadRequestException(MESSAGES.BIRTH_TOO_OLD[lang]);
+      }
+
+      // 2️⃣ username / email tekshirish
+      const exists = await this.prisma.user.findFirst({
+        where: {
+          OR: [{ username: dto.username }, { email: dto.email }],
+        },
+      });
+
+      if (exists) {
+        throw new ConflictException(MESSAGES.USER_EXISTS[lang]);
+      }
+
+      // 3️⃣ CREATE
+      const user = await this.prisma.user.create({
+        data: {
+          id: randomUUID(),
+          fullName: dto.fullName!,
+          username: dto.username!,
+          email: dto.email!,
+          password: dto.password!,
+          phoneNumber: dto.phoneNumber,
+          avatarUrl: dto.avatarUrl,
+          timezone: dto.timezone,
+          locale: dto.locale,
+          theme: dto.theme,
+          weekStartDay: dto.weekStartDay,
+          birthDate: birthDate,
+          // status va isActive DB defaultdan keladi
+        },
+      });
+
+      // 4️⃣ RESPONSE
+      return {
+        statusCode: 201,
+        success: true,
+        message: MESSAGES.USER_CREATED[lang],
+        data: this.serializeUser(user),
+      };
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(MESSAGES.USER_EXISTS[lang]);
+      }
+
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException(MESSAGES.CREATE_FAILED[lang]);
     }
-
-    const minDate = BigInt(-2208988800000); // 1900-01-01
-    if (birthTimestamp < minDate) {
-      throw new BadRequestException(MESSAGES.BIRTH_TOO_OLD[lang]);
-    }
-
-    // 2️⃣ username / email tekshirish
-    const exists = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ username: dto.username }, { email: dto.email }],
-      },
-    });
-
-    if (exists) {
-      throw new ConflictException(MESSAGES.USER_EXISTS[lang]);
-    }
-
-    // 3️⃣ CREATE
-    const user = await this.prisma.user.create({
-      data: {
-        id: randomUUID(),
-        ...dto,
-        birthDate: birthTimestamp,
-      },
-    });
-
-    // 4️⃣ RESPONSE
-    return {
-      statusCode: 201,
-      success: true,
-      message: MESSAGES.USER_CREATED[lang],
-      data: this.serializeUser(user),
-    };
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
-      throw new ConflictException(MESSAGES.USER_EXISTS[lang]);
-    }
-
-    if (
-      error instanceof BadRequestException ||
-      error instanceof ConflictException
-    ) {
-      throw error;
-    }
-
-    throw new InternalServerErrorException(
-      MESSAGES.CREATE_FAILED[lang],
-    );
   }
-}
 
   // =========================
   // READ ALL

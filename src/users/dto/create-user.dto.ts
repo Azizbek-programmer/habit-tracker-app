@@ -13,16 +13,16 @@ export class CreateUserDto {
   @ApiProperty({ example: 'Ali Valiyev' })
   @IsNotEmpty()
   @IsString()
-  fullName: string;
+  fullName?: string;
 
   @ApiProperty({ example: 'ali_99' })
   @IsNotEmpty()
   @IsString()
-  username: string;
+  username?: string;
 
   @ApiProperty({ example: 'ali@gmail.com' })
   @IsEmail()
-  email: string;
+  email?: string;
 
   @ApiPropertyOptional({ example: '+998901234567' })
   @IsOptional()
@@ -30,7 +30,7 @@ export class CreateUserDto {
 
   @ApiProperty({ example: 'StrongPassword123!' })
   @IsNotEmpty()
-  password: string;
+  password?: string;
 
   @ApiPropertyOptional({ example: 'https://cdn.site/avatar.png' })
   @IsOptional()
@@ -76,11 +76,11 @@ export class CreateUserDto {
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  isVerified?: boolean;
   @ApiProperty({
     example: '946684800000',
-    description: 'Tug‘ilgan sana (timestamp, BigInt string)',
+    description: 'Tug‘ilgan sana (timestamp, birthDatestring)',
   })
   @IsNotEmpty()
-  birthDate: string;
+  birthDate!: string;
 }

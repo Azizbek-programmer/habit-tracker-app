@@ -64,47 +64,46 @@ enum NotificationType {
 /// USER & AUTH
 ////////////////////
 
-model User {
-  id                    String   @id @db.Char(36)
-  fullName              String   @db.VarChar(100)
-  username              String   @unique @db.VarChar(50)
-  email                 String   @unique @db.VarChar(150)
-  phoneNumber           String?  @db.VarChar(20)
-  password              String   @db.Text
-  avatarUrl             String?
-  role                  UserRole @default(USER)
-  status                UserStatus @default(ACTIVE)
-  timezone              String?  @db.VarChar(50)
-  locale                String?  @db.VarChar(10)
-  theme                 String?  @db.VarChar(10)
-  weekStartDay          String?  @db.VarChar(10)
-  onboardingCompleted   Boolean  @default(false)
-  isActive              Boolean  @default(true)
-  otpCode            String?
-  otpExpiresAt       DateTime?
-  hashedRefreshToken    String?
-  birthDate             BigInt
-  lastLoginAt           DateTime?
-  lastActiveAt          DateTime?
-  createdAt             DateTime @default(now())
+  model User {
+    id                    String   @id @db.Char(36)
+    fullName              String   @db.VarChar(100)
+    username              String   @unique @db.VarChar(50)
+    email                 String   @unique @db.VarChar(150)
+    phoneNumber           String?  @db.VarChar(20)
+    password              String   @db.Text
+    avatarUrl             String?
+    role                  UserRole @default(USER)
+    status                UserStatus @default(INACTIVE)
+    timezone              String?  @db.VarChar(50)
+    locale                String?  @db.VarChar(10)
+    theme                 String?  @db.VarChar(10)
+    weekStartDay          String?  @db.VarChar(10)
+    onboardingCompleted   Boolean  @default(false)
+    isVerified            Boolean  @default(false)
+    otpCode            String?
+    otpExpiresAt       DateTime?
+    hashedRefreshToken    String?
+    birthDate             BigInt?
+    lastLoginAt           DateTime?
+    lastActiveAt          DateTime?
+    createdAt             DateTime @default(now())
 
-  // Relations
-  tasks                 Task[]
-  habits                Habit[]
-  goals                 Goal[]
-  taskLogs              TaskLog[]
-  habitLogs             HabitLog[]
-  analyticsDaily        UserAnalyticsDaily[]
-  analyticsMonthly      UserAnalyticsMonthly[]
-  calendarDays          CalendarDay[]
-  sessions              UserTimeSession[]
-  notifications         UserNotification[]
-  subscription          Subscription?
-  payments              Payment[]
-  activityLogs          UserActivityLog[]
+    failedLoginAttempts Int      @default(0)
+    lockUntil           DateTime?
 
-  @@map("users")
-}
+
+    // Relations
+    tasks                 Task[]
+    habits                Habit[]
+    goals                 Goal[]
+    taskLogs              TaskLog[]
+    habitLogs             HabitLog[]
+    notifications         UserNotification[]
+    subscription          Subscription?
+    payments              Payment[]
+
+    @@map("users")
+  }
 
 ////////////////////
 /// TASK SYSTEM
@@ -173,7 +172,6 @@ model Habit {
 
   user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   logs   HabitLog[]
-  insight HabitInsight?
 
   @@map("habits")
 }
@@ -189,18 +187,6 @@ model HabitLog {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("habit_logs")
-}
-
-model HabitInsight {
-  id                String @id @db.Char(36)
-  habitId           String @unique @db.Char(36)
-  weekSuccessRate   Int?
-  monthSuccessRate  Int?
-  dropReason        String?
-
-  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
-
-  @@map("habit_insights")
 }
 
 ////////////////////
@@ -230,69 +216,6 @@ model GoalTask {
 
   @@id([goalId, taskId])
   @@map("goal_tasks")
-}
-
-////////////////////
-/// TIME & CALENDAR
-////////////////////
-
-model UserTimeSession {
-  id              String   @id @db.Char(36)
-  userId          String   @db.Char(36)
-  sessionStart    DateTime
-  sessionEnd      DateTime?
-  activeDuration  Int?
-  idleDuration    Int?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_time_sessions")
-}
-
-model CalendarDay {
-  id              String   @id @db.Char(36)
-  userId          String   @db.Char(36)
-  date            DateTime
-  completedTasks  Int?
-  missedTasks     Int?
-  habitScore      Int?
-  moodScore       Int?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("calendar_days")
-}
-
-////////////////////
-/// ANALYTICS
-////////////////////
-
-model UserAnalyticsDaily {
-  id               String   @id @db.Char(36)
-  userId           String   @db.Char(36)
-  date             DateTime
-  focusScore       Int?
-  disciplineScore  Int?
-  consistencyScore Int?
-  burnoutRisk      Int?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_analytics_daily")
-}
-
-model UserAnalyticsMonthly {
-  id                  String   @id @db.Char(36)
-  userId              String   @db.Char(36)
-  month               String
-  productivityTrend   String?
-  habitStability      Int?
-  bestDayOfWeek       String?
-  worstDayOfWeek      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_analytics_monthly")
 }
 
 ////////////////////
@@ -343,14 +266,3 @@ model UserNotification {
   @@map("user_notifications")
 }
 
-model UserActivityLog {
-  id        String   @id @db.Char(36)
-  userId    String   @db.Char(36)
-  action    String
-  metadata  Json?
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_activity_logs")
-}

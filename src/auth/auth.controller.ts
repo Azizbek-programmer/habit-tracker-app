@@ -2,10 +2,12 @@ import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateAuthDto } from './dto/create-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import type { Request, Response } from 'express';
+
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -19,12 +21,10 @@ register(@Body() dto: CreateAuthDto, @Res({ passthrough: true }) res: Response) 
 
 
 @Post('login')
-login(
-  @Body() dto: LoginAuthDto,
-  @Res({ passthrough: true }) res: Response,
-) {
-  return this.authService.login(dto, res);
+login(@Body() dto: LoginAuthDto, @Res({ passthrough: true }) res: Response, @Req() req: Request) {
+  return this.authService.login(dto, res, req);
 }
+
 
 @UseGuards(AuthGuard('refresh-jwt'))
 @Post('refresh')
@@ -37,7 +37,8 @@ refresh(@Req() req, @Res({ passthrough: true }) res: Response) {
 }
 
 
-@UseGuards(AuthGuard('access-jwt'))
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
 @Post('logout')
 logout(@Req() req, @Res({ passthrough: true }) res: Response) {
   return this.authService.logout(req.user.sub, res);

@@ -41,7 +41,7 @@ export class CreateAuthDto {
   @IsNotEmpty()
   @MinLength(3)
   @MaxLength(100)
-  fullName: string;
+  fullName!: string;
 
   // ================= USERNAME =================
   @ApiProperty({
@@ -55,18 +55,18 @@ export class CreateAuthDto {
   @Matches(/^[a-z0-9_]+$/, {
     message: 'username can contain only lowercase letters, numbers and "_"',
   })
-  username: string;
+  username!: string;
 
   // ================= EMAIL =================
   @ApiProperty({
     example: 'azizbekmirzavaliyev31@gmail.com',
   })
   @IsEmail()
-  email: string;
+  email!: string;
 
   // ================= PASSWORD =================
   @ApiProperty({
-    example: 'StrongPassword123',
+    example: 'StrongPassword123@',
     minLength: 8,
     description:
       'Minimum 8 characters, at least 1 letter and 1 number',
@@ -76,7 +76,7 @@ export class CreateAuthDto {
   @Matches(/^(?=.*[A-Za-z])(?=.*\d).+$/, {
     message: 'password must contain at least one letter and one number',
   })
-  password: string;
+  password!: string;
 
   // ================= PHONE =================
   @ApiPropertyOptional({
@@ -130,7 +130,7 @@ export class CreateAuthDto {
     description: 'Birth date as timestamp (milliseconds)',
   })
   @IsNumberString()
-  birthDate: string;
+  birthDate!: string;
 
-  hashedRefreshToken: string
+  hashedRefreshToken!: string
 }
