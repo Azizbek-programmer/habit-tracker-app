@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { RefreshTokenStrategy } from 'src/common/strategies/refresh-token.strategy';
 import { AccessTokenStrategy } from 'src/common/strategies/access-token-strategy';
 import { MailModule } from 'src/mail/mail.module';
+import { RedisService } from 'src/redis/redis.service';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { MailModule } from 'src/mail/mail.module';
     AuthService,
     AccessTokenStrategy,
     RefreshTokenStrategy,
+    RedisService
   ],
 })
 export class AuthModule {}

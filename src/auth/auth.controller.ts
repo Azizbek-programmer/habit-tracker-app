@@ -45,9 +45,10 @@ logout(@Req() req, @Res({ passthrough: true }) res: Response) {
 }
 
 @Post('verify-otp')
-verifyOtp(@Body() dto: VerifyOtpDto) {
-  return this.authService.verifyOtp(dto.email, dto.otp);
+verifyOtp(@Body() dto: VerifyOtpDto, @Req() req: Request) {
+  return this.authService.verifyOtp(dto.email, dto.otp, req);
 }
+
 
 
 
