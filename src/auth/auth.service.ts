@@ -16,6 +16,9 @@ import { MailService } from 'src/mail/mail.service';
 import { AUTH_MESSAGES } from 'src/common/message/user/messages';
 import { RedisService } from 'src/redis/redis.service';
 import type { Request, Response } from 'express';
+import { ConfigService } from '@nestjs/config';
+import { UserStatus } from '@prisma/client';
+// import type { SetOptions } from 'ioredis';
 
 @Injectable()
 export class AuthService {
@@ -24,6 +27,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly redisService: RedisService,
+    private readonly config: ConfigService,
   ) {}
   private readonly fakeRefreshHash =
     '$2b$10$1bQvB2m6n7k8fXl7qOQqW8j3kqYd3oWfEw5p8Y4j1r9q2s9tK0';
@@ -161,30 +165,23 @@ export class AuthService {
   async verifyOtp(email: string, otp: string, req: Request) {
     const normalizedEmail = email.toLowerCase().trim();
 
-    // ===== IP olish (login dagidek) =====
     const ip =
       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
       req.socket.remoteAddress ||
       'unknown';
 
-    // ===== Redis =====
     const redis = this.redisService.redis;
 
-    // ===== Redis keylar (verify-otp uchun) =====
     const ipRateKey = `rate:verify-otp:ip:${ip}`;
     const ipBlockKey = `block:verify-otp:ip:${ip}`;
     const ipFailKey = `fail:verify-otp:ip:${ip}`;
 
-    // ===== 1) IP BLOCK check =====
     const ipBlockedUntil = await redis.get(ipBlockKey);
     if (ipBlockedUntil && Number(ipBlockedUntil) > Date.now()) {
-      // timing signal bermaslik uchun bcrypt compare baribir ishlaydi
       await bcrypt.compare(otp, this.fakeOtpHash);
       throw new BadRequestException('Invalid OTP');
     }
 
-    // ===== 2) GLOBAL RATE LIMIT (per IP) =====
-    // Masalan: 15 request / 60 sec
     const RATE_LIMIT = 15;
     const RATE_WINDOW_SEC = 60;
 
@@ -194,16 +191,13 @@ export class AuthService {
     }
 
     if (ipCount > RATE_LIMIT) {
-      // 5 minut IP block
       const ipBlockMs = 5 * 60 * 1000;
       await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
 
-      // timing signal bermaslik uchun bcrypt compare baribir ishlaydi
       await bcrypt.compare(otp, this.fakeOtpHash);
       throw new BadRequestException('Invalid OTP');
     }
 
-    // ===== Timing attack uchun =====
     let otpHashToCompare = this.fakeOtpHash;
     let isOtpMatch = false;
 
@@ -216,73 +210,54 @@ export class AuthService {
           id: true,
           otpCode: true,
           otpExpiresAt: true,
-          isVerified: true,
-
+          status: true,
           otpAttempts: true,
           otpBlockedUntil: true,
         },
       });
 
-      // ===== Timing attackdan himoya: compare doim ishlaydi =====
       otpHashToCompare = user?.otpCode ?? this.fakeOtpHash;
       isOtpMatch = await bcrypt.compare(otp, otpHashToCompare);
 
-      // ===== Expire check =====
       const isExpired = !user?.otpExpiresAt || user.otpExpiresAt < now;
 
-      // ===== Account OTP block (DB) =====
       const isAccountBlocked =
         !!user?.otpBlockedUntil && user.otpBlockedUntil > now;
 
       /**
-       * INVALID holatlar:
-       * - user yo'q
-       * - otp yo'q
-       * - verified bo'lgan
-       * - expired
-       * - account block
-       * - otp match emas
+       * MUHIM:
+       * Agar user allaqachon ACTIVE bo‘lsa OTP ishlamasligi kerak
        */
+      const alreadyVerified = user?.status === UserStatus.ACTIVE;
+
       const isInvalid =
         !user ||
         !user.otpCode ||
-        user.isVerified ||
+        alreadyVerified ||
         isExpired ||
         isAccountBlocked ||
         !isOtpMatch;
 
-      // ===== 3) FAIL bo‘lsa: DB attempt + Redis IP fail =====
       if (isInvalid) {
-        // ===== IP fail count (user bo'lmasa ham ishlaydi) =====
         const ipFails = await redis.incr(ipFailKey);
         if (ipFails === 1) {
-          await redis.expire(ipFailKey, 15 * 60); // 15 min
+          await redis.expire(ipFailKey, 15 * 60);
         }
 
-        // 10 ta fail bo‘lsa IP block (login dagidek)
         if (ipFails >= 10) {
           const ipBlockMs = 10 * 60 * 1000;
           await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
         }
 
-        /**
-         * DB attempt faqat user mavjud bo‘lsa oshadi:
-         * (otp bor, verified emas, expired emas, account block emas)
-         */
         if (
           user &&
           user.otpCode &&
-          !user.isVerified &&
+          user.status === UserStatus.PENDING &&
           !isExpired &&
           !isAccountBlocked
         ) {
           const newAttempts = (user.otpAttempts ?? 0) + 1;
 
-          // ===== EXPO BACKOFF (login dagidek) =====
-          // 3 urinish -> 10 min
-          // 4 urinish -> 30 min
-          // 5 urinish -> 2 soat
-          // 6+ -> 24 soat
           const getOtpLockMinutes = (attempts: number) => {
             if (attempts < 3) return 0;
             if (attempts === 3) return 10;
@@ -305,29 +280,28 @@ export class AuthService {
           });
         }
 
-        // ===== Har doim bir xil response =====
         throw new BadRequestException('Invalid OTP');
       }
 
-      // ===== SUCCESS bo‘lsa: verify + reset =====
+      /**
+       * SUCCESS
+       * PENDING -> ACTIVE
+       */
       await this.prisma.user.update({
         where: { id: user.id },
         data: {
-          isVerified: true,
+          status: UserStatus.ACTIVE,
           otpCode: null,
           otpExpiresAt: null,
-
           otpAttempts: 0,
           otpBlockedUntil: null,
         },
       });
 
-      // ===== SUCCESS bo‘lsa: IP fail reset =====
       await redis.del(ipFailKey);
 
       return { message: 'Email verified successfully' };
     } catch (err) {
-      // timing uchun: har qanday error bo‘lsa ham compare ishlagan bo‘lsin
       if (!isOtpMatch) {
         await bcrypt.compare(otp, otpHashToCompare);
       }
@@ -382,7 +356,6 @@ export class AuthService {
     // 1) USER YO‘Q bo‘lsa ham bir xil error qaytarish kerak
     if (!user) {
       // ===== NEW (IP fail count) =====
-      // user yo‘q bo‘lsa ham IP bo‘yicha fail hisoblaymiz
       const ipFailKey = `fail:login:ip:${ip}`;
       const ipFails = await redis.incr(ipFailKey);
 
@@ -390,7 +363,6 @@ export class AuthService {
         await redis.expire(ipFailKey, 15 * 60); // 15 min
       }
 
-      // 10 ta fail bo‘lsa IP block
       if (ipFails >= 10) {
         const ipBlockMs = 10 * 60 * 1000;
         await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
@@ -422,15 +394,10 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
 
     if (!isPasswordValid) {
+      // ✅ faqat verify bo‘lgan userlarda attempts++ qilamiz
       const newAttempts = (user.failedLoginAttempts ?? 0) + 1;
 
-      const MAX_ATTEMPTS = 5;
-
-      // ===== NEW (EXPO BACKOFF) =====
-      // 5 urinish -> 10 min
-      // 6 urinish -> 30 min
-      // 7 urinish -> 2 soat
-      // 8+ -> 24 soat
+      // ===== EXPO BACKOFF =====
       const getLockMinutes = (attempts: number) => {
         if (attempts < 5) return 0;
         if (attempts === 5) return 10;
@@ -452,15 +419,14 @@ export class AuthService {
         },
       });
 
-      // ===== NEW (IP fail count) =====
+      // ===== IP fail count =====
       const ipFailKey = `fail:login:ip:${ip}`;
       const ipFails = await redis.incr(ipFailKey);
 
       if (ipFails === 1) {
-        await redis.expire(ipFailKey, 15 * 60); // 15 min
+        await redis.expire(ipFailKey, 15 * 60);
       }
 
-      // 10 ta fail bo‘lsa IP block
       if (ipFails >= 10) {
         const ipBlockMs = 10 * 60 * 1000;
         await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
@@ -483,47 +449,76 @@ export class AuthService {
     // ===== NEW (IP fail reset) =====
     await redis.del(`fail:login:ip:${ip}`);
 
-    // 5) verify check
-    if (!user.isVerified) {
-      throw new UnauthorizedException('Invalid credentials');
+    // ===== Status check faqat password to‘g‘ri bo‘lgandan keyin =====
+    if (user.status === UserStatus.PENDING) {
+      throw new UnauthorizedException('Email verify required');
     }
 
-    // 6) banned check
-    if (user.status === 'BANNED') {
-      throw new UnauthorizedException('Invalid credentials');
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new UnauthorizedException('Account suspended');
     }
+
+    if (user.status === UserStatus.BANNED) {
+      throw new UnauthorizedException('Account banned');
+    }
+
+    const jti = randomUUID();
+    const familyId = randomUUID(); // Yangi token family ID
 
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
+      jti,
     };
 
-    const accessToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.ACCESS_TOKEN_KEY!,
-      expiresIn: process.env.ACCESS_TOKEN_TIME as StringValue,
-    });
+    const accessToken = await this.jwtService.signAsync(
+      { sub: user.id, email: user.email, role: user.role, jti },
+      {
+        secret: this.config.getOrThrow<string>('ACCESS_TOKEN_KEY'),
+        expiresIn: this.config.getOrThrow<string>(
+          'ACCESS_TOKEN_TIME',
+        ) as StringValue,
+      },
+    );
 
-    const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.REFRESH_TOKEN_KEY!,
-      expiresIn: process.env.REFRESH_TOKEN_TIME as StringValue,
-    });
+    const refreshToken = await this.jwtService.signAsync(
+      { sub: user.id, email: user.email, role: user.role, jti },
+      {
+        secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
+        expiresIn: this.config.getOrThrow<string>(
+          'REFRESH_TOKEN_TIME',
+        ) as StringValue,
+      },
+    );
 
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
 
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
-        status: 'ACTIVE',
         hashedRefreshToken,
+        refreshFamilyId: familyId,
         lastLoginAt: new Date(),
         lastActiveAt: new Date(),
       },
     });
 
+    // ===== NEW: refresh jti store (Redis) =====
+    const refreshTtlSec = this.config.getOrThrow<number>(
+      'REFRESH_TOKEN_TTL_SEC',
+    );
+
+    await this.redisService.redis.set(
+      `refresh:jti:user:${user.id}:${familyId}`,
+      jti,
+      'EX',
+      refreshTtlSec,
+    );
+
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      maxAge: Number(process.env.COOKIE_TIME),
+      maxAge: Number(this.config.getOrThrow<string>('COOKIE_TIME')),
       sameSite: 'strict',
     });
 
@@ -541,63 +536,129 @@ export class AuthService {
 
   // ================= REFRESH =================
   async refreshTokens(userId: string, refreshToken: string, res: Response) {
+    const redis = this.redisService.redis;
+
+    let tokenPayload: any = null;
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
+      tokenPayload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
       });
+    } catch {
+      tokenPayload = null;
+    }
 
-      // 🔥 Timing attackdan himoya: user topilmasa ham compare ishlaydi
-      const hashToCompare = user?.hashedRefreshToken ?? this.fakeRefreshHash;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
 
-      const isValid = await bcrypt.compare(refreshToken, hashToCompare);
+    // Timing attack himoya
+    const hashToCompare = user?.hashedRefreshToken ?? this.fakeRefreshHash;
+    const isValid = await bcrypt.compare(refreshToken, hashToCompare);
 
-      if (!user || !user.hashedRefreshToken) {
+    if (!user || !user.hashedRefreshToken || !isValid) {
+      throw new UnauthorizedException('Access denied');
+    }
+
+    const tokenJti = tokenPayload?.jti;
+    if (!tokenJti) throw new UnauthorizedException('Access denied');
+
+    // =========================
+    // Redis-based lock
+    // =========================
+    const newFamilyId = randomUUID();
+    const redisKey = `refresh:jti:user:${user.id}:${newFamilyId}`;
+    const lockKey = `lock:refresh:user:${user.id}`;
+
+    // ✅ Inline object, tip-safe
+    const lockAcquired = await redis.set(lockKey, '1', 'EX', 10, 'NX');
+
+    if (!lockAcquired) {
+      throw new UnauthorizedException('Too many refresh requests, try again');
+    }
+
+    try {
+      // 2️⃣ Reuse detection
+      if (!user.refreshFamilyId) {
         throw new UnauthorizedException('Access denied');
       }
 
-      if (!isValid) {
-        throw new UnauthorizedException('Access denied'); // ❗ bitta xil error
+      const oldRedisKey = `refresh:jti:user:${user.id}:${user.refreshFamilyId}`;
+      const redisJti = await redis.getdel(oldRedisKey)
+
+      if (!redisJti || redisJti !== tokenJti) {
+        // 🔥 Reuse detected → family revoke
+
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            hashedRefreshToken: null,
+            refreshFamilyId: null,
+          },
+        });
+
+        res.clearCookie('refreshToken', { httpOnly: true, sameSite: 'strict' });
+        throw new UnauthorizedException('Access denied (token reuse)');
       }
 
-      const payload = {
-        sub: user.id,
-        email: user.email,
-        role: user.role,
-      };
+      // 3️⃣ Rotate JTI
+      const newJti = randomUUID();
 
-      const newAccessToken = await this.jwtService.signAsync(payload, {
-        secret: process.env.ACCESS_TOKEN_KEY!,
-        expiresIn: process.env.ACCESS_TOKEN_TIME as StringValue,
-      });
+      const newAccessToken = await this.jwtService.signAsync(
+        { sub: user.id, email: user.email, role: user.role, jti: newJti },
+        {
+          secret: this.config.getOrThrow<string>('ACCESS_TOKEN_KEY'),
+          expiresIn: this.config.getOrThrow<string>(
+            'ACCESS_TOKEN_TIME',
+          ) as StringValue,
+        },
+      );
 
-      const newRefreshToken = await this.jwtService.signAsync(payload, {
-        secret: process.env.REFRESH_TOKEN_KEY!,
-        expiresIn: process.env.REFRESH_TOKEN_TIME as StringValue,
-      });
+      const newRefreshToken = await this.jwtService.signAsync(
+        { sub: user.id, email: user.email, role: user.role, jti: newJti },
+        {
+          secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
+          expiresIn: this.config.getOrThrow<string>(
+            'REFRESH_TOKEN_TIME',
+          ) as StringValue,
+        },
+      );
 
       const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 10);
 
+      // 4️⃣ DB update
       await this.prisma.user.update({
         where: { id: user.id },
-        data: { hashedRefreshToken },
+        data: {
+          hashedRefreshToken,
+          refreshFamilyId: newFamilyId,
+        },
       });
 
+      // 5️⃣ Redis update
+      const refreshTtlSec = this.config.getOrThrow<number>(
+        'REFRESH_TOKEN_TTL_SEC',
+      );
+      await redis.set(redisKey, newJti, 'EX', refreshTtlSec);
+
+      // eski family keyni o‘chiramiz (rotation chain)
+      await redis.del(oldRedisKey);
+
+      // 6️⃣ Cookie update
       res.cookie('refreshToken', newRefreshToken, {
         httpOnly: true,
-        maxAge: Number(process.env.COOKIE_TIME),
+        maxAge: Number(this.config.getOrThrow<string>('COOKIE_TIME')),
         sameSite: 'strict',
       });
 
-      return {
-        accessToken: newAccessToken,
-      };
-    } catch (error) {
-      throw error;
+      return { accessToken: newAccessToken };
+    } finally {
+      // Release lock
+      await redis.del(lockKey);
     }
   }
 
   // ================= LOGOUT =================
-  async logout(userId: string, res: Response) {
+  async logout(userId: string, jti: string, res: Response) {
     if (!userId) {
       return res.status(400).json({
         success: false,
@@ -609,15 +670,41 @@ export class AuthService {
     }
 
     try {
+      // 1️⃣ User DB dan familyId va hashed token olish
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      const familyId = user?.refreshFamilyId;
+
+      // 2️⃣ Redisdagi refresh token JTI o‘chirish (family bilan)
+      if (familyId) {
+        await this.redisService.redis.del(
+          `refresh:jti:user:${userId}:${familyId}`,
+        );
+      }
+
+      // 3️⃣ DB update → hashed token + family clear + status + lastActiveAt
       await this.prisma.user.update({
         where: { id: userId },
         data: {
           hashedRefreshToken: null,
-          status: 'INACTIVE',
+          refreshFamilyId: null,
+          status: UserStatus.INACTIVE,
           lastActiveAt: new Date(),
         },
       });
 
+      // 4️⃣ Redis blacklistga access token jti yozish (revoked)
+      const ttlSec = 15 * 60 * 60; // 15h, kerak bo‘lsa envdan olish mumkin
+      await this.redisService.redis.set(
+        `blacklist:access:${jti}`,
+        'revoked',
+        'EX',
+        ttlSec,
+      );
+
+      // 5️⃣ Cookie clear
       res.clearCookie('refreshToken', {
         httpOnly: true,
         sameSite: 'strict',
@@ -631,6 +718,7 @@ export class AuthService {
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
+      console.error('Logout error:', error);
       return res.status(500).json({
         success: false,
         statusCode: 500,

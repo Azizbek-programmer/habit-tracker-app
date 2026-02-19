@@ -184,3 +184,39 @@ holatga keltirildi.
 ✅ IP block (10 min)
 ✅ Account lock + exponential backoff
 ✅ User enumeration himoya (hamma joyda “Invalid credentials”)
+
+
+
+
+
+
+
+
+
+
+
+
+
+================================================================================================================
+
+🧠 Yakuniy refresh flow (ultimate secure)
+
+1️⃣ JWT verify
+2️⃣ bcrypt compare
+3️⃣ Redis lock (NX EX)
+4️⃣ GETDEL old family key
+5️⃣ Agar mismatch → revoke
+6️⃣ Generate new jti
+7️⃣ Update DB
+8️⃣ SET new redis key
+9️⃣ Release lock
+
+📊 Hozirgi Security Level
+Qism	Holat
+Timing attack protection	✅
+IP rate limit	✅
+Account lock	✅
+Refresh rotation	✅
+Reuse detection	✅
+Redis lock	✅
+Atomic reuse	🔥 (GETDEL bilan 100%)

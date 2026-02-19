@@ -1,25 +1,29 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class MailService {
   private transporter;
+  private readonly mailFrom: string;
 
-  constructor() {
+  constructor(private readonly config: ConfigService) {
+    this.mailFrom = this.config.getOrThrow<string>('MAIL_FROM');
+
     this.transporter = nodemailer.createTransport({
-      host: process.env.smtp_host,
-      port: Number(process.env.smtp_port),
+      host: this.config.getOrThrow<string>('smtp_host'),
+      port: Number(this.config.getOrThrow<number>('smtp_port')),
       secure: false,
       auth: {
-        user: process.env.smtp_user,
-        pass: process.env.smtp_password,
+        user: this.config.getOrThrow<string>('smtp_user'),
+        pass: this.config.getOrThrow<string>('smtp_password'),
       },
     });
   }
 
   async sendOtp(email: string, otp: string) {
     await this.transporter.sendMail({
-      from: `"My App" <${process.env.MAIL_FROM}>`,
+      from: `"My App" <${this.mailFrom}>`,
       to: email,
       subject: '🔐 Your OTP Verification Code',
       html: `

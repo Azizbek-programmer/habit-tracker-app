@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateAuthDto } from './dto/create-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
@@ -39,10 +39,17 @@ refresh(@Req() req, @Res({ passthrough: true }) res: Response) {
 
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
+@UseGuards(AuthGuard('jwt'))
 @Post('logout')
-logout(@Req() req, @Res({ passthrough: true }) res: Response) {
-  return this.authService.logout(req.user.sub, res);
+logout(@Req() req: Request, @Res() res: Response) {
+  if (!req.user?.sub || !req.user?.jti) {
+    throw new UnauthorizedException('Invalid token');
+  }
+
+  return this.authService.logout(req.user.sub, req.user.jti, res);
 }
+
+
 
 @Post('verify-otp')
 verifyOtp(@Body() dto: VerifyOtpDto, @Req() req: Request) {

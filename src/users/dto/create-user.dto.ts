@@ -73,10 +73,6 @@ export class CreateUserDto {
   @IsBoolean()
   onboardingCompleted?: boolean;
 
-  @ApiPropertyOptional({ example: true })
-  @IsOptional()
-  @IsBoolean()
-  isVerified?: boolean;
   @ApiProperty({
     example: '946684800000',
     description: 'Tug‘ilgan sana (timestamp, birthDatestring)',

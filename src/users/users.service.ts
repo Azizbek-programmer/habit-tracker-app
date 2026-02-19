@@ -60,7 +60,6 @@ export class UserService {
           theme: dto.theme,
           weekStartDay: dto.weekStartDay,
           birthDate: birthDate,
-          // status va isActive DB defaultdan keladi
         },
       });
 
