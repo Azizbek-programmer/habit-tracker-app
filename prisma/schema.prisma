@@ -65,49 +65,72 @@ enum NotificationType {
 /// USER & AUTH
 ////////////////////
 
-  model User {
-    id                    String   @id @db.Char(36)
-    fullName              String   @db.VarChar(100)
-    username              String   @unique @db.VarChar(50)
-    email                 String   @unique @db.VarChar(150)
-    phoneNumber           String?  @db.VarChar(20)
-    password              String   @db.Text
-    avatarUrl             String?
-    role                  UserRole @default(USER)
-    status UserStatus     @default(PENDING)
-    timezone              String?  @db.VarChar(50)
-    locale                String?  @db.VarChar(10)
-    theme                 String?  @db.VarChar(10)
-    weekStartDay          String?  @db.VarChar(10)
-    onboardingCompleted   Boolean  @default(false)
-    otpCode            String?
-    otpExpiresAt       DateTime?
-    hashedRefreshToken    String?
-    refreshFamilyId      String? 
-    birthDate             BigInt?
-    lastLoginAt           DateTime?
-    lastActiveAt          DateTime?
-    createdAt             DateTime @default(now())
+model User {
+  id                  String     @id @db.Char(36)
+  fullName            String     @db.VarChar(100)
+  username            String     @unique @db.VarChar(50)
+  email               String     @unique @db.VarChar(150)
+  phoneNumber         String?    @db.VarChar(20)
+  password            String     @db.Text
+  avatarUrl           String?
+  timezone            String?  @db.VarChar(50)
+  locale              String?  @db.VarChar(10)
+  theme               String?  @db.VarChar(10)
+  weekStartDay        String?  @db.VarChar(10)
+  onboardingCompleted Boolean  @default(false)
+  birthDate           BigInt?
 
-    failedLoginAttempts Int      @default(0)
-    lockUntil           DateTime?
-    otpAttempts     Int      @default(0)
-    otpBlockedUntil DateTime?
+  role                UserRole   @default(USER)
+  status              UserStatus @default(PENDING)
+
+  failedLoginAttempts Int        @default(0)
+  lockUntil           DateTime?
+
+  createdAt           DateTime   @default(now())
+
+  // Relations
+  sessions            UserSession[]
+  tasks               Task[]
+  habits              Habit[]
+  goals               Goal[]
+  taskLogs            TaskLog[]
+  habitLogs           HabitLog[]
+  notifications       UserNotification[]
+  subscription        Subscription?
+  payments            Payment[]
+
+  @@map("users")
+}
 
 
+model UserSession {
+  id                   String   @id @default(uuid())
 
-    // Relations
-    tasks                 Task[]
-    habits                Habit[]
-    goals                 Goal[]
-    taskLogs              TaskLog[]
-    habitLogs             HabitLog[]
-    notifications         UserNotification[]
-    subscription          Subscription?
-    payments              Payment[]
+  userId               String
+  refreshFamilyId      String?
+  hashedRefreshToken   String?
 
-    @@map("users")
-  }
+  // Device / tracking
+  deviceInfo           String?
+  ipAddress            String?
+  userAgent            String?
+
+  // OTP logic ko‘chadi shu yerga
+  otpCode              String?
+  otpExpiresAt         DateTime?
+  otpAttempts          Int       @default(0)
+  otpBlockedUntil      DateTime?
+
+  // Activity tracking
+  lastLoginAt          DateTime?
+  lastActiveAt         DateTime  @updatedAt
+  createdAt            DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshFamilyId])
+}
 
 ////////////////////
 /// TASK SYSTEM

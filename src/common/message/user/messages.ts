@@ -67,4 +67,9 @@ export const AUTH_MESSAGES = {
     ru: 'Неверный формат даты рождения',
     en: 'Invalid birth date format',
   },
+  OTP_RESENT: {
+    uz: 'Yangi OTP kod emailingizga qayta yuborildi',
+    ru: 'Новый OTP код повторно отправлен на ваш email',
+    en: 'A new OTP code has been resent to your email',
+  },
 };
