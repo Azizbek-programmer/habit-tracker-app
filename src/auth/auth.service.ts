@@ -18,7 +18,7 @@ import { RedisService } from 'src/redis/redis.service';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { UserStatus } from '@prisma/client';
-// import type { SetOptions } from 'ioredis';
+import { generateOtp } from '../common/utils/otp.util';
 
 @Injectable()
 export class AuthService {
@@ -76,8 +76,10 @@ export class AuthService {
         where: {
           OR: [{ email: dto.email }, { username: dto.username }],
         },
-        include: {
-          sessions: true,
+        select: {
+          id: true,
+          email: true,
+          status: true,
         },
       });
 
@@ -89,15 +91,15 @@ export class AuthService {
 
         // 🔥 Agar user PENDING bo‘lsa — OTP resend qilamiz
         if (existingUser.status === 'PENDING') {
-          const otp = Math.floor(100000 + Math.random() * 900000).toString();
+          const otp = generateOtp(6);
           const otpExpires = new Date(Date.now() + 5 * 60 * 1000);
           const hashedOtp = await bcrypt.hash(otp, 10);
 
-          await this.prisma.userSession.updateMany({
-            where: {
-              userId: existingUser.id,
-            },
+          await this.prisma.userSession.create({
             data: {
+              userId: existingUser.id,
+              refreshFamilyId: randomUUID(),
+              hashedRefreshToken: '',
               otpCode: hashedOtp,
               otpExpiresAt: otpExpires,
             },
@@ -121,7 +123,7 @@ export class AuthService {
       const hashedPassword = await bcrypt.hash(dto.password, 10);
 
       // 5️⃣ OTP GENERATE (transaction ichidan tashqarida bo‘lsa ham bo‘ladi)
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otp = generateOtp(6);
       const otpExpires = new Date(Date.now() + 5 * 60 * 1000);
 
       // 6️⃣ OTP HASH
@@ -264,6 +266,13 @@ export class AuthService {
       orderBy: {
         createdAt: 'desc',
       },
+      select: {
+        id: true,
+        otpCode: true,
+        otpExpiresAt: true,
+        otpAttempts: true,
+        otpBlockedUntil: true,
+      },
     });
 
     if (!session) {
@@ -281,7 +290,7 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(
       otp,
-      session.otpCode ?? this.fakeOtpHash,
+      session.otpCode || this.fakeOtpHash,
     );
 
     if (!isMatch || isExpired || isBlocked) {
@@ -329,6 +338,22 @@ export class AuthService {
     // 6️⃣ SUCCESS
     // =========================
     await this.prisma.$transaction(async (tx) => {
+      const updatedSession = await tx.userSession.updateMany({
+        where: {
+          id: session.id,
+          otpCode: { not: null },
+          otpExpiresAt: { gt: new Date() },
+        },
+        data: {
+          otpCode: null,
+          otpExpiresAt: null,
+        },
+      });
+
+      if (updatedSession.count === 0) {
+        throw new BadRequestException('OTP already used or expired');
+      }
+
       // User ACTIVE qilish
       await tx.user.update({
         where: { id: user.id },
@@ -338,13 +363,10 @@ export class AuthService {
       });
 
       // Session cleanup
-      await tx.userSession.update({
-        where: { id: session.id },
-        data: {
-          otpCode: null,
-          otpExpiresAt: null,
-          otpAttempts: 0,
-          otpBlockedUntil: null,
+      await tx.userSession.deleteMany({
+        where: {
+          userId: user.id,
+          otpCode: { not: null },
         },
       });
     });
@@ -396,6 +418,16 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({
       where: { email },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        role: true,
+        status: true,
+        fullName: true,
+        failedLoginAttempts: true,
+        lockUntil: true,
+      },
     });
 
     // 1) USER YO‘Q bo‘lsa ham bir xil error qaytarish kerak
@@ -521,7 +553,7 @@ export class AuthService {
     );
 
     const refreshToken = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, role: user.role, jti },
+      { sub: user.id, email: user.email, role: user.role, jti, familyId },
       {
         secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
         expiresIn: this.config.getOrThrow<string>(
@@ -533,7 +565,7 @@ export class AuthService {
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
 
     // Create new session
-    await this.prisma.userSession.create({
+    const createdSession = await this.prisma.userSession.create({
       data: {
         userId: user.id,
         refreshFamilyId: familyId,
@@ -551,7 +583,7 @@ export class AuthService {
     );
 
     await this.redisService.redis.set(
-      `refresh:jti:user:${user.id}:${familyId}`,
+      `refresh:jti:session:${createdSession.id}`,
       jti,
       'EX',
       refreshTtlSec,
@@ -561,6 +593,7 @@ export class AuthService {
       httpOnly: true,
       maxAge: Number(this.config.getOrThrow<string>('COOKIE_TIME')),
       sameSite: 'strict',
+      secure: this.config.get('NODE_ENV') === 'production',
     });
 
     return {
@@ -576,16 +609,26 @@ export class AuthService {
   }
 
   // ================= REFRESH =================
-  async refreshTokens(userId: string, refreshToken: string, res: Response) {
+  async refreshTokens(refreshToken: string, res: Response) {
     const redis = this.redisService.redis;
 
     let tokenPayload: any = null;
 
+    const refreshTtlSec = this.config.getOrThrow<number>(
+      'REFRESH_TOKEN_TTL_SEC',
+    );
+
     try {
       tokenPayload = await this.jwtService.verifyAsync(refreshToken, {
         secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
+        ignoreExpiration: false,
       });
     } catch {
+      throw new UnauthorizedException('Access denied');
+    }
+    const userId = tokenPayload?.sub;
+
+    if (!userId) {
       throw new UnauthorizedException('Access denied');
     }
 
@@ -604,9 +647,30 @@ export class AuthService {
         userId,
         refreshFamilyId: familyId,
       },
+      select: {
+        id: true,
+        hashedRefreshToken: true,
+        refreshFamilyId: true,
+      },
     });
 
     if (!session) {
+      await bcrypt.compare(refreshToken, this.fakeRefreshHash);
+      throw new UnauthorizedException('Access denied');
+    }
+
+    if (!session.hashedRefreshToken) {
+      await bcrypt.compare(refreshToken, this.fakeRefreshHash);
+      throw new UnauthorizedException('Access denied');
+    }
+
+    // 🔐 REFRESH TOKEN INTEGRITY CHECK
+    const isValid = await bcrypt.compare(
+      refreshToken,
+      session.hashedRefreshToken,
+    );
+
+    if (!isValid) {
       throw new UnauthorizedException('Access denied');
     }
 
@@ -627,11 +691,15 @@ export class AuthService {
       // =========================
       const redisKey = `refresh:jti:session:${session.id}`;
 
-      const redisJti = await redis.getdel(redisKey);
+      const redisJti = await redis.get(redisKey);
+
+      // if (redisJti) {
+      //   await redis.del(redisKey);
+      // }
 
       if (!redisJti || redisJti !== tokenJti) {
-        // 🔥 Reuse detected → revoke session
-
+        // 🔥 reuse detected
+        await bcrypt.compare(refreshToken, this.fakeRefreshHash);
         await this.prisma.userSession.delete({
           where: { id: session.id },
         });
@@ -643,18 +711,43 @@ export class AuthService {
 
         throw new UnauthorizedException('Access denied (token reuse)');
       }
+      // ✅ faqat valid bo‘lsa delete qilamiz
+      await redis.del(redisKey);
 
       // =========================
       // 4️⃣ Rotate JTI + Family
       // =========================
       const newJti = randomUUID();
-      const newFamilyId = randomUUID();
+      const newFamilyId = session.refreshFamilyId;
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+        },
+      });
+
+      if (!user) {
+        await this.prisma.userSession.delete({
+          where: { id: session.id },
+        });
+
+        res.clearCookie('refreshToken', {
+          httpOnly: true,
+          sameSite: 'strict',
+        });
+
+        throw new UnauthorizedException('User not found');
+      }
 
       const newAccessToken = await this.jwtService.signAsync(
         {
-          sub: userId,
+          sub: user.id,
+          email: user.email,
+          role: user.role,
           jti: newJti,
-          familyId: newFamilyId,
         },
         {
           secret: this.config.getOrThrow<string>('ACCESS_TOKEN_KEY'),
@@ -683,32 +776,36 @@ export class AuthService {
       // =========================
       // 5️⃣ Session update
       // =========================
-      await this.prisma.userSession.update({
-        where: { id: session.id },
-        data: {
-          hashedRefreshToken,
-          refreshFamilyId: newFamilyId,
-        },
-      });
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          // session update
+          await tx.userSession.update({
+            where: { id: session.id },
+            data: { hashedRefreshToken, refreshFamilyId: newFamilyId },
+          });
 
-      // =========================
-      // 6️⃣ Redis update
-      // =========================
-      const refreshTtlSec = this.config.getOrThrow<number>(
-        'REFRESH_TOKEN_TTL_SEC',
-      );
-
-      await redis.set(
-        `refresh:jti:session:${session.id}`,
-        newJti,
-        'EX',
-        refreshTtlSec,
-      );
+          // Redis update
+          await redis.set(
+            `refresh:jti:session:${session.id}`,
+            newJti,
+            'EX',
+            refreshTtlSec,
+          );
+        });
+      } catch {
+        // agar xatolik bo‘lsa session revoke qilamiz
+        await this.prisma.userSession.delete({ where: { id: session.id } });
+        throw new InternalServerErrorException(
+          'Failed to finalize refresh rotation',
+        );
+      }
 
       // =========================
       // 7️⃣ Cookie update
       // =========================
       res.cookie('refreshToken', newRefreshToken, {
+        secure: this.config.get('NODE_ENV') === 'production',
+        path: '/',
         httpOnly: true,
         maxAge: Number(this.config.getOrThrow<string>('COOKIE_TIME')),
         sameSite: 'strict',
@@ -721,80 +818,63 @@ export class AuthService {
   }
 
   // ================= LOGOUT =================
-  async logout(userId: string, jti: string, res: Response) {
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        statusCode: 400,
-        message: 'User ID is required for logout',
-        data: null,
-        timestamp: new Date().toISOString(),
-      });
+  async logout(userId: string, refreshToken: string) {
+    const redis = this.redisService.redis;
+
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token missing');
     }
 
+    let payload: any;
+
+    // =========================
+    // 1️⃣ Token verification with try/catch
+    // =========================
     try {
-      // =========================
-      // 1️⃣ Active session topamiz
-      // =========================
-      const session = await this.prisma.userSession.findFirst({
-        where: {
-          userId,
-        },
+      payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
       });
+    } catch {
+      // agar token invalid bo‘lsa
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
-      if (session) {
-        // =========================
-        // 2️⃣ Redis refresh JTI o‘chirish
-        // =========================
-        await this.redisService.redis.del(`refresh:jti:session:${session.id}`);
+    if (payload.sub !== userId) {
+      throw new UnauthorizedException('Invalid token owner');
+    }
 
-        // =========================
-        // 3️⃣ Session delete
-        // =========================
-        await this.prisma.userSession.delete({
-          where: { id: session.id },
-        });
-      }
+    const familyId = payload.familyId;
 
-      // =========================
-      // 4️⃣ Access token blacklist
-      // =========================
-      if (jti) {
-        const ttlSec = 15 * 60 * 60; // kerak bo‘lsa env qilamiz
+    if (!familyId) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
 
-        await this.redisService.redis.set(
-          `blacklist:access:${jti}`,
-          'revoked',
-          'EX',
-          ttlSec,
-        );
-      }
+    const session = await this.prisma.userSession.findFirst({
+      where: {
+        userId,
+        refreshFamilyId: familyId,
+      },
+    });
 
-      // =========================
-      // 5️⃣ Cookie clear
-      // =========================
-      res.clearCookie('refreshToken', {
-        httpOnly: true,
-        sameSite: 'strict',
-      });
+    if (session) {
+      await redis.del(`refresh:jti:session:${session.id}`);
 
-      return res.status(200).json({
-        success: true,
-        statusCode: 200,
-        message: 'Logged out successfully',
-        data: null,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error('Logout error:', error);
-
-      return res.status(500).json({
-        success: false,
-        statusCode: 500,
-        message: 'Logout failed',
-        data: null,
-        timestamp: new Date().toISOString(),
+      await this.prisma.userSession.delete({
+        where: { id: session.id },
       });
     }
+
+    if (payload.jti) {
+      const ttlSec = this.config.getOrThrow<number>('ACCESS_TOKEN_TTL_SEC');
+
+      await redis.set(
+        `blacklist:access:${payload.jti}`,
+        'revoked',
+        'EX',
+        ttlSec,
+      );
+    }
+
+    return { success: true };
   }
 }

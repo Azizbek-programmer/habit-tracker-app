@@ -20,6 +20,7 @@ import { RedisService } from 'src/redis/redis.service';
     AccessTokenStrategy,
     RefreshTokenStrategy,
     RedisService
+    
   ],
 })
 export class AuthModule {}

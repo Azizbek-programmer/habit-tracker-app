@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { RedisModule } from './redis/redis.module';
+import { LoggerModule } from './common/logging/logger.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { RedisModule } from './redis/redis.module';
     PrismaModule,
     AuthModule,
     RedisModule,
+    LoggerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

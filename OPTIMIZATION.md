@@ -220,3 +220,52 @@ Refresh rotation	✅
 Reuse detection	✅
 Redis lock	✅
 Atomic reuse	🔥 (GETDEL bilan 100%)
+
+
+
+# ==  memory usage optimization qoshdim 
+
+
+# ======================================== QOSHISH KERAK BOLGAN OPTIMIZATSIYALAR
+
+🚀 Keyingi Level Optimization
+Agar xohlasang keyingi bosqich:
+⚡ Composite index optimization
+⚡ Prisma query batching
+⚡ Caching strategy
+⚡ DB connection pooling tuning
+⚡ Refresh flowni 30% tezlashtirish
+Qaysi tomonga chuqurlashamiz?
+
+
+
+🔥 8. Missing Professional Features
+Senda yo‘q:
+Device tracking
+IP logging
+Suspicious login detection
+Token revocation list
+Email change verification
+Password change invalidates tokens
+2FA support
+Audit log
+
+
+
+📦 common/decorators ichiga nimalar qo‘yiladi?
+Odatda quyidagilar:
+Decorator turi	Nima uchun ishlatiladi
+@GetUser()	Request ichidan user olish
+@Public()	Guardni skip qilish
+@Roles()	Role-based access
+@ApiFile()	Swagger file upload
+@Pagination()	Query pagination olish
+
+
+
+🔹 Umumiy tavsiyalar
+Magic numbers: OTP expiration, rate limits, lock minutes kabi qiymatlarni config orqali boshqarish.
+Error messages: Hozirda ba’zi xatolar BadRequestException('Invalid OTP') kabi stringlar bilan. Ularni ham AUTH_MESSAGES ichida saqlash va til qo‘llab-quvvatlash bilan ishlash yaxshiroq.
+Transactionlar: verifyOtp va login session update-lari uchun $transaction ishlatish xavfsiz.
+Testing: Unit test va integration testlar bilan barcha OTP va login flow’larni test qiling.
+Security: OTP va refresh token hash uchun salting rounds (bcrypt.hash(..., 10)) yetarli, lekin production uchun 12 tavsiya qilinadi.
