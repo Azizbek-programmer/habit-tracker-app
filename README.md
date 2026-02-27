@@ -11,20 +11,53 @@
 
   <p align="center">Shaxsiy rivojlanish va odatlarni kuzatish ilovasi uchun xavfsiz va aqlli backend.</p>
 
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-<a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-<a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-<a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
+<div align="center">
+<a href="https://www.prisma.io/" target="_blank">
+  <img src="https://img.shields.io/badge/Prisma-Blue?style=flat-square&logo=prisma&logoColor=white" alt="Prisma" />
+</a>
+<a href="https://www.postgresql.org/" target="_blank">
+  <img src="https://img.shields.io/badge/PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+</a>
+<a href="https://redis.io/" target="_blank">
+  <img src="https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis" />
+</a>
+<a href="https://nestjs.com/" target="_blank">
+  <img src="https://img.shields.io/badge/NestJS-E0234E?style=flat-square&logo=nestjs&logoColor=white" alt="NestJS" />
+</a>
+<a href="https://www.npmjs.com/package/bcrypt" target="_blank">
+  <img src="https://img.shields.io/badge/bcrypt-9B59B6?style=flat-square&logo=npm&logoColor=white" alt="bcrypt" />
+</a>
+<a href="https://jwt.io/" target="_blank">
+  <img src="https://img.shields.io/badge/JWT-000000?style=flat-square&logo=JSONWebTokens&logoColor=white" alt="JWT" />
+</a>
+<a href="https://nodemailer.com/about/" target="_blank">
+  <img src="https://img.shields.io/badge/Nodemailer-D14836?style=flat-square&logo=nodemailer&logoColor=white" alt="Nodemailer" />
+</a>
+<a href="https://expressjs.com/" target="_blank">
+  <img src="https://img.shields.io/badge/Express-000000?style=flat-square&logo=express&logoColor=white" alt="Express" />
+</a>
+<a href="https://www.typescriptlang.org/" target="_blank">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+</a>
+<a href="https://nodejs.org/" target="_blank">
+  <img src="https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
+</a>
+</div>
 
 </p>
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+
+<details>
+  <summary>📌 Loyihaning umumiy tavsifi</summary>
+
+  <div align="center">
+    <img src="./prisma/docs/diagram.svg" width="600" alt="Database Schema">
+  </div>
+
+</details>
+
+
 
 ## Description
 
