@@ -76,12 +76,15 @@ foydalanuvchilarga odatlarni kuzatish, rivojlanishni boshqarish va
 
 <details>
 <summary style="font-size:16px; font-weight:600; color:#3b82f6;">📡 API Overview</summary>
-<div style="margin-left:20px;">
+<div align="center">
  <details>
 
- <summary>|🔐 Auth</summary>
+ <summary>🔐 Auth</summary>
 
 ### Auth Endpoints
+
+<div align="left">
+
 ~~~js
 POST /auth/register     // Foydalanuvchini ro‘yxatdan o‘tkazish (OTP yuboriladi)
 POST /auth/verify-otp   // Emailga yuborilgan OTP kodni tasdiqlash
@@ -89,13 +92,16 @@ POST /auth/login        // Login qilish va access + refresh token olish
 POST /auth/refresh      // Refresh token orqali yangi access token yaratish
 POST /auth/logout       // Sessionni yopish va tokenlarni bekor qilish
 ~~~
+</div>
 </details>
 
 <details>
 
-<summary>|👤 Users</summary>
+<summary>👤 Users</summary>
 
 ### User Endpoints
+
+<div align="left">
 
 ~~~js
 POST   /users          // Yangi user yaratish
@@ -104,6 +110,7 @@ GET    /users/:id      // Userni ID orqali olish
 PATCH  /users/:id      // User ma’lumotlarini yangilash
 DELETE /users/:id      // Userni o‘chirish
 ~~~
+</div>
 
 </details>
 </div>
