@@ -55,6 +55,7 @@
 
 <details>
 <summary style="font-size:16px; font-weight:600; color:#3b82f6;">📡 API Overview</summary>
+<div style="margin-left:20px;">
 <details>
 
 <summary>🔐 Auth</summary>
@@ -84,8 +85,10 @@ DELETE /users/:id      // Userni o‘chirish
 ~~~
 
 </details>
+</div>
 
 </details>
+
 
 <details>
 <summary style="font-size:16px; font-weight:600; color:#3b82f6;">📘 Description</summary>
