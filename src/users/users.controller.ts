@@ -58,10 +58,7 @@ export class UserController {
   @ApiOperation({ summary: 'Userni yangilash' })
   @ApiParam({ name: 'id', example: 'clx123abc' })
   @ApiResponse({ status: 200, description: 'User yangilandi' })
-  update(
-    @Param('id') id: string,
-    @Body() dto: UpdateUserDto,
-  ) {
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.userService.update(id, dto);
   }
 

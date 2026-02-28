@@ -6,7 +6,10 @@ import { ConfigService } from '@nestjs/config';
 import { RedisService } from 'src/redis/redis.service';
 
 @Injectable()
-export class AccessTokenStrategy extends PassportStrategy(Strategy, 'access-jwt') {
+export class AccessTokenStrategy extends PassportStrategy(
+  Strategy,
+  'access-jwt',
+) {
   constructor(
     config: ConfigService,
     private readonly redisService: RedisService,

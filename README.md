@@ -43,30 +43,41 @@
   <img src="https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
 </a>
 </div>
-
 </p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
 <details>
-  <summary>📌 Loyihaning umumiy tavsifi</summary>
+  <summary style="font-size:16px; font-weight:600; color:#3b82f6;">📌 Loyihaning umumiy diogrammasi</summary>
 
-  <div align="center">
+  <div align="center ">
     <img src="./prisma/docs/diagram.svg" width="600" alt="Database Schema">
   </div>
 
 </details>
-
-
-
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+<details>
+<summary style="font-size:16px; font-weight:600; color:#3b82f6;">📘 Description</summary>
+<div style="border-left: 3px solid #3b82f6; padding-left: 50px; margin-left: 6px;">
+<h3>🧠 Backend haqida</h3>
+Ushbu backend <b>NestJS</b>, <b>Prisma</b> va <b>TypeScript</b> asosida qurilgan bo‘lib,  
+<b>tezkor</b>, <b>xavfsiz</b> va <b>oson kengaytiriladigan arxitektura</b>ga ega.
+<h3>✨ Muhim jihatlar</h3>
+<hr>
+<ul>
+<li>💾 <b>Ishonchli ma’lumotlar bazasi operatsiyalari</b><br>
+Prisma tranzaksiyalari orqali ma’lumotlar yaxlitligi ta’minlanadi.</li>
+<li>⚡ <b>Toza va kengaytiriladigan struktura</b><br>
+Odatlar, maqsadlar va shaxsiy rivojlanish modullarini qo‘shish uchun tayyor arxitektura.</li>
+</ul>
+🚀 Ushbu backend <b>Habits Tracker</b> ilovasining yuragi bo‘lib,  
+foydalanuvchilarga odatlarni kuzatish, rivojlanishni boshqarish va  
+<b>xavfsiz tarzda o‘sishni</b> ta’minlaydi.
+</div>
+<br>
+</details>
 
 ## Project setup
 
 ```bash
-$ npm install
+$ npm run start:dev #loyhani ishga tushirish
 ```
 
 ## Compile and run the project

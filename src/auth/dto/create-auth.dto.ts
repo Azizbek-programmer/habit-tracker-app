@@ -9,10 +9,7 @@ import {
   IsEnum,
   IsNumberString,
 } from 'class-validator';
-import {
-  ApiProperty,
-  ApiPropertyOptional,
-} from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 enum Theme {
   LIGHT = 'light',
@@ -68,8 +65,7 @@ export class CreateAuthDto {
   @ApiProperty({
     example: 'StrongPassword123@',
     minLength: 8,
-    description:
-      'Minimum 8 characters, at least 1 letter and 1 number',
+    description: 'Minimum 8 characters, at least 1 letter and 1 number',
   })
   @IsString()
   @MinLength(8)
@@ -132,5 +128,5 @@ export class CreateAuthDto {
   @IsNumberString()
   birthDate!: string;
 
-  hashedRefreshToken!: string
+  hashedRefreshToken!: string;
 }

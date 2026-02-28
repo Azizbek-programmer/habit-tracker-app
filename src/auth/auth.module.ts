@@ -9,19 +9,13 @@ import { MailModule } from 'src/mail/mail.module';
 import { RedisService } from 'src/redis/redis.service';
 
 @Module({
-  imports: [
-    PrismaModule,
-    JwtModule.register({}),
-    MailModule
-  ],
+  imports: [PrismaModule, JwtModule.register({}), MailModule],
   controllers: [AuthController],
   providers: [
     AuthService,
     AccessTokenStrategy,
     RefreshTokenStrategy,
-    RedisService
-    
+    RedisService,
   ],
 })
 export class AuthModule {}
-
