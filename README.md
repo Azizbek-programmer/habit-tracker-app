@@ -51,8 +51,42 @@
   <div align="center ">
     <img src="./prisma/docs/diagram.svg" width="600" alt="Database Schema">
   </div>
+</details>
+
+<details>
+<summary style="font-size:16px; font-weight:600; color:#3b82f6;">📡 API Overview</summary>
+<details>
+
+<summary>🔐 Auth</summary>
+
+### Auth Endpoints
+~~~js
+POST /auth/register     // Foydalanuvchini ro‘yxatdan o‘tkazish (OTP yuboriladi)
+POST /auth/verify-otp   // Emailga yuborilgan OTP kodni tasdiqlash
+POST /auth/login        // Login qilish va access + refresh token olish
+POST /auth/refresh      // Refresh token orqali yangi access token yaratish
+POST /auth/logout       // Sessionni yopish va tokenlarni bekor qilish
+~~~
+</details>
+
+<details>
+
+<summary>👤 Users</summary>
+
+### User Endpoints
+
+~~~js
+POST   /users          // Yangi user yaratish
+GET    /users          // Barcha userlarni olish (pagination bilan)
+GET    /users/:id      // Userni ID orqali olish
+PATCH  /users/:id      // User ma’lumotlarini yangilash
+DELETE /users/:id      // Userni o‘chirish
+~~~
 
 </details>
+
+</details>
+
 <details>
 <summary style="font-size:16px; font-weight:600; color:#3b82f6;">📘 Description</summary>
 <div style="border-left: 3px solid #3b82f6; padding-left: 50px; margin-left: 6px;">
@@ -80,6 +114,56 @@ foydalanuvchilarga odatlarni kuzatish, rivojlanishni boshqarish va
 $ npm run start:dev #loyhani ishga tushirish
 ```
 
+# <p align="center">🏗 Architecture Overview</p>
+  <p align="center">Tizim servislar, ma’lumotlar bazasi va kesh qatlamlari o‘rtasida aniq ajratilgan mas’uliyat tamoyiliga asoslanadi.</p>
+
+### 1️⃣ 🔐 Authentication & Authorization System
+Kengaytirilgan xavfsizlik mexanizmlariga ega JWT asosidagi autentifikatsiya tizimi. 
+OTP tasdiqlash, refresh token rotation, IP rate limiting va token reuse detection orqali himoyalangan.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
 ## Compile and run the project
 
 ```bash
