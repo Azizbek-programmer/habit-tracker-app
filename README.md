@@ -59,17 +59,22 @@
 
  <summary>🔐 Auth</summary>
 
-### Auth Endpoints
 
 <div align="left">
 
-~~~js
-POST /auth/register     // Foydalanuvchini ro‘yxatdan o‘tkazish (OTP yuboriladi)
-POST /auth/verify-otp   // Emailga yuborilgan OTP kodni tasdiqlash
-POST /auth/login        // Login qilish va access + refresh token olish
-POST /auth/refresh      // Refresh token orqali yangi access token yaratish
-POST /auth/logout       // Sessionni yopish va tokenlarni bekor qilish
-~~~
+---
+
+> ### Auth Endpoints
+>
+> ```js
+> POST   /auth/register     // Foydalanuvchini ro‘yxatdan o‘tkazish (OTP yuboriladi)
+> POST   /auth/verify-otp   // Emailga yuborilgan OTP kodni tasdiqlash
+> POST   /auth/login        // Login qilish va access + refresh token olish
+> POST   /auth/refresh      // Refresh token orqali yangi access token yaratish
+> POST   /auth/logout       // Sessionni yopish va tokenlarni bekor qilish
+> ```
+
+---
 </div>
 </details>
 
@@ -77,17 +82,21 @@ POST /auth/logout       // Sessionni yopish va tokenlarni bekor qilish
 
 <summary>👤 Users</summary>
 
-### User Endpoints
 
 <div align="left">
+---
 
-~~~js
-POST   /users          // Yangi user yaratish
-GET    /users          // Barcha userlarni olish (pagination bilan)
-GET    /users/:id      // Userni ID orqali olish
-PATCH  /users/:id      // User ma’lumotlarini yangilash
-DELETE /users/:id      // Userni o‘chirish
-~~~
+> ### User Endpoints
+>
+> ```js
+> POST   /users        // Yangi user yaratish
+> GET    /users        // Barcha userlarni olish (pagination bilan)
+> GET    /users/:id    // Userni ID orqali olish
+> PATCH  /users/:id    // User ma’lumotlarini yangilash
+> DELETE /users/:id    // Userni o‘chirish
+> ```
+
+---
 </div>
 
 </details>
