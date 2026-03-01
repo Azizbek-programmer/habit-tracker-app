@@ -96,24 +96,33 @@ DELETE /users/:id      // Userni o‘chirish
 </details>
 
 <details>
-<summary style="font-size:16px; font-weight:600; color:#3b82f6;">📘 Description</summary>
-<div style="border-left: 3px solid #3b82f6; padding-left: 50px; margin-left: 6px;">
-<h3>🧠 Backend haqida</h3>
-Ushbu backend <b>NestJS</b>, <b>Prisma</b> va <b>TypeScript</b> asosida qurilgan bo‘lib,  
-<b>tezkor</b>, <b>xavfsiz</b> va <b>oson kengaytiriladigan arxitektura</b>ga ega.
-<h3>✨ Muhim jihatlar</h3>
-<hr>
-<ul>
-<li>💾 <b>Ishonchli ma’lumotlar bazasi operatsiyalari</b><br>
-Prisma tranzaksiyalari orqali ma’lumotlar yaxlitligi ta’minlanadi.</li>
-<li>⚡ <b>Toza va kengaytiriladigan struktura</b><br>
-Odatlar, maqsadlar va shaxsiy rivojlanish modullarini qo‘shish uchun tayyor arxitektura.</li>
-</ul>
-🚀 Ushbu backend <b>Habits Tracker</b> ilovasining yuragi bo‘lib,  
-foydalanuvchilarga odatlarni kuzatish, rivojlanishni boshqarish va  
-<b>xavfsiz tarzda o‘sishni</b> ta’minlaydi.
-</div>
-<br>
+<summary><strong>📘 Description</strong></summary>
+
+---
+
+> ### 🧠 Backend haqida
+>
+> Ushbu backend **NestJS**, **Prisma** va **TypeScript** asosida qurilgan bo‘lib,  
+> **tezkor**, **xavfsiz** va **oson kengaytiriladigan arxitektura**ga ega.
+>
+> ---
+>
+> ### ✨ Muhim jihatlar
+>
+> - 💾 **Ishonchli ma’lumotlar bazasi operatsiyalari**  
+>   Prisma tranzaksiyalari orqali ma’lumotlar yaxlitligi ta’minlanadi.
+>
+> - ⚡ **Toza va kengaytiriladigan struktura**  
+>   Odatlar, maqsadlar va shaxsiy rivojlanish modullarini qo‘shish uchun tayyor arxitektura.
+>
+> ---
+>
+> 🚀 Ushbu backend **Habits Tracker** ilovasining yuragi bo‘lib,  
+> foydalanuvchilarga odatlarni kuzatish, rivojlanishni boshqarish va  
+> **xavfsiz tarzda o‘sishni** ta’minlaydi.
+
+---
+
 </details>
 
 
