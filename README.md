@@ -52,28 +52,6 @@
     <img src="./prisma/docs/diagram.svg" width="600" alt="Database Schema">
   </div>
 </details>
-
-<details>
-<summary style="font-size:16px; font-weight:600; color:#3b82f6;">📘 Description</summary>
-<div style="border-left: 3px solid #3b82f6; padding-left: 50px; margin-left: 6px;">
-<h3>🧠 Backend haqida</h3>
-Ushbu backend <b>NestJS</b>, <b>Prisma</b> va <b>TypeScript</b> asosida qurilgan bo‘lib,  
-<b>tezkor</b>, <b>xavfsiz</b> va <b>oson kengaytiriladigan arxitektura</b>ga ega.
-<h3>✨ Muhim jihatlar</h3>
-<hr>
-<ul>
-<li>💾 <b>Ishonchli ma’lumotlar bazasi operatsiyalari</b><br>
-Prisma tranzaksiyalari orqali ma’lumotlar yaxlitligi ta’minlanadi.</li>
-<li>⚡ <b>Toza va kengaytiriladigan struktura</b><br>
-Odatlar, maqsadlar va shaxsiy rivojlanish modullarini qo‘shish uchun tayyor arxitektura.</li>
-</ul>
-🚀 Ushbu backend <b>Habits Tracker</b> ilovasining yuragi bo‘lib,  
-foydalanuvchilarga odatlarni kuzatish, rivojlanishni boshqarish va  
-<b>xavfsiz tarzda o‘sishni</b> ta’minlaydi.
-</div>
-<br>
-</details>
-
 <details>
 <summary style="font-size:16px; font-weight:600; color:#3b82f6;">📡 API Overview</summary>
 <div align="center">
@@ -117,6 +95,28 @@ DELETE /users/:id      // Userni o‘chirish
 
 </details>
 
+<details>
+<summary style="font-size:16px; font-weight:600; color:#3b82f6;">📘 Description</summary>
+<div style="border-left: 3px solid #3b82f6; padding-left: 50px; margin-left: 6px;">
+<h3>🧠 Backend haqida</h3>
+Ushbu backend <b>NestJS</b>, <b>Prisma</b> va <b>TypeScript</b> asosida qurilgan bo‘lib,  
+<b>tezkor</b>, <b>xavfsiz</b> va <b>oson kengaytiriladigan arxitektura</b>ga ega.
+<h3>✨ Muhim jihatlar</h3>
+<hr>
+<ul>
+<li>💾 <b>Ishonchli ma’lumotlar bazasi operatsiyalari</b><br>
+Prisma tranzaksiyalari orqali ma’lumotlar yaxlitligi ta’minlanadi.</li>
+<li>⚡ <b>Toza va kengaytiriladigan struktura</b><br>
+Odatlar, maqsadlar va shaxsiy rivojlanish modullarini qo‘shish uchun tayyor arxitektura.</li>
+</ul>
+🚀 Ushbu backend <b>Habits Tracker</b> ilovasining yuragi bo‘lib,  
+foydalanuvchilarga odatlarni kuzatish, rivojlanishni boshqarish va  
+<b>xavfsiz tarzda o‘sishni</b> ta’minlaydi.
+</div>
+<br>
+</details>
+
+
 
 ## Project setup
 
@@ -130,6 +130,178 @@ $ npm run start:dev #loyhani ishga tushirish
 ### 1️⃣ 🔐 Authentication & Authorization System
 Kengaytirilgan xavfsizlik mexanizmlariga ega JWT asosidagi autentifikatsiya tizimi. 
 OTP tasdiqlash, refresh token rotation, IP rate limiting va token reuse detection orqali himoyalangan.
+
+<details>
+<summary style="font-size:18px; font-weight:700; color:#22c55e;">📝 Auth → Register (Advanced Secure Flow)</summary>
+
+<br>
+
+---
+
+#  Register tizimi haqida
+
+Ushbu `register` oddiy foydalanuvchi yaratish funksiyasi emas.  
+Bu production-ready, xavfsiz va professional darajadagi **multi-layer validation + OTP verification** tizimidir.
+
+Oddiy register’dan farqli ravishda bu yerda:
+
+- ❌ Oddiy ma’lumot saqlash yo‘q  
+- 🔐 Kuchli xavfsizlik tekshiruvlari mavjud  
+- 📧 Email tasdiqlash majburiy  
+- 🔄 Pending user uchun OTP resend mexanizmi bor  
+- 🧠 Ma’lumotlar tranzaksiya orqali saqlanadi  
+
+---
+
+# 🧩 Register Flow Bosqichlari
+
+---
+
+## 1️⃣ 🎂 Birth Date Validation (Kengaytirilgan tekshiruv)
+
+- 📌 Faqat valid timestamp qabul qilinadi
+- ❌ Noto‘g‘ri format rad etiladi
+- ❌ Kelajak sanasi mumkin emas
+- ❌ 1900-yildan eski sana mumkin emas
+- 🌍 Xatolik xabarlari `locale` asosida qaytariladi
+
+👉 Bu noto‘g‘ri yoki manipulyatsiya qilingan ma’lumotlarni oldini oladi.
+
+---
+
+## 2️⃣ 🔑 Strong Password Validation
+
+Password oddiy emas. Quyidagilar majburiy:
+
+- 🔡 Kamida 1 ta kichik harf
+- 🔠 Kamida 1 ta katta harf
+- 🔢 Kamida 1 ta raqam
+- 🔐 Kamida 1 ta maxsus belgi
+- 📏 Minimum 8 ta belgi
+
+Weak password → darhol `400 BadRequest`
+
+---
+
+## 3️⃣ 👤 User Exists Smart Check
+
+Email yoki username bazada tekshiriladi.
+
+### Holatlar:
+
+### ✅ ACTIVE user bo‘lsa:
+- ❌ Register to‘xtatiladi
+- `409 Conflict`
+
+### 🕒 PENDING user bo‘lsa:
+- 🔄 Yangi OTP yaratiladi
+- 🔐 OTP hash qilinadi
+- 💾 userSession ga yoziladi
+- 📧 Email qayta yuboriladi
+- 🔁 Yangi user yaratmaydi
+
+👉 Bu duplicate account ochilishini oldini oladi.
+
+---
+
+## 4️⃣ 🔐 Password Hashing
+
+- `bcrypt` bilan hash qilinadi
+- Plain password hech qachon saqlanmaydi
+
+---
+
+## 5️⃣ 🔢 OTP Generation & Hash
+
+- 6 xonali OTP generatsiya qilinadi
+- 5 daqiqa amal qiladi
+- OTP ham `bcrypt` orqali hash qilinadi
+- Plain OTP bazada saqlanmaydi
+
+---
+
+## 6️⃣ 🧼 Email Normalization
+
+- Email `toLowerCase()`
+- `trim()` qilinadi
+
+👉 Duplicate email risk kamayadi.
+
+---
+
+## 7️⃣ 🏗 Prisma Transaction
+
+Quyidagilar **bitta transaction** ichida bajariladi:
+
+- 👤 User yaratish
+- 🔐 OTP bilan userSession yaratish
+
+Agar bittasi xato bersa — hammasi rollback bo‘ladi.
+
+---
+
+## 8️⃣ 📧 OTP Email Yuborish
+
+- Transaction tugagandan keyin yuboriladi
+- Database consistency saqlanadi
+
+---
+
+## 9️⃣ 🌍 Localized Response System
+
+Barcha xatolik va success xabarlari:
+
+- 🇺🇿 Uzbek
+- 🇷🇺 Russian
+- 🇬🇧 English
+
+`dto.locale` asosida ishlaydi.
+
+---
+
+# 🛡 Security Advantages
+
+Bu register tizimi:
+
+- 🔒 Hashlangan password
+- 🔐 Hashlangan OTP
+- 🔁 OTP resend protection
+- 🧠 Smart status handling (ACTIVE / PENDING)
+- 💾 Transactional safety
+- 🌍 Localized errors
+- ❌ Duplicate protection
+- 📅 Strict data validation
+
+---
+
+# ⚡ Oddiy Register’dan Farqi
+
+| Oddiy Register | Sizning Register |
+|---------------|------------------|
+| Faqat user create | Multi-layer validation |
+| OTP yo‘q | OTP verification system |
+| Transaction yo‘q | Prisma transaction |
+| Password minimal check | Strong regex validation |
+| Duplicate muammo | Smart status logic |
+| Email normalize qilinmaydi | Normalize qilinadi |
+| Plain OTP | Hashed OTP |
+
+---
+
+# 🧠 Xulosa
+
+Bu `register` production darajadagi,  
+enterprise xavfsizlik standartlariga yaqinlashtirilgan tizim bo‘lib:
+
+> 🔥 Account abuse oldini oladi  
+> 🔥 Duplicate user yaratmaydi  
+> 🔥 Ma’lumotlar yaxlitligini saqlaydi  
+> 🔥 OTP orqali haqiqiy email egasini tasdiqlaydi  
+
+Bu oddiy CRUD emas — bu real security flow.
+
+<br>
+</details>
 
 
 
