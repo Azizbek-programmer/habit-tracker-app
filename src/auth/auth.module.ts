@@ -7,6 +7,9 @@ import { RefreshTokenStrategy } from 'src/common/strategies/refresh-token.strate
 import { AccessTokenStrategy } from 'src/common/strategies/access-token-strategy';
 import { MailModule } from 'src/mail/mail.module';
 import { RedisService } from 'src/redis/redis.service';
+import { TokenService } from './utils/token.service';
+import { SessionService } from './utils/session.service';
+import { RateLimitService } from './utils/rateLimit.service';
 
 @Module({
   imports: [PrismaModule, JwtModule.register({}), MailModule],
@@ -16,6 +19,10 @@ import { RedisService } from 'src/redis/redis.service';
     AccessTokenStrategy,
     RefreshTokenStrategy,
     RedisService,
+    TokenService,
+    SessionService,
+    RateLimitService,
   ],
+  exports: [AuthService, TokenService],
 })
 export class AuthModule {}

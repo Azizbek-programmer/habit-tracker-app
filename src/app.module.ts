@@ -39,6 +39,8 @@ import { LoggerModule } from './common/logging/logger.module';
 
         REFRESH_TOKEN_TTL_SEC: Joi.number().integer().min(60).required(),
 
+        ACCESS_TOKEN_TTL_SEC: Joi.number().integer().min(60).max(60 * 60).required(),
+
         COOKIE_TIME: Joi.number().integer().min(1000).required(),
 
         API_URL: Joi.string()

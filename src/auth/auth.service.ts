@@ -11,7 +11,6 @@ import { LoginAuthDto } from './dto/login-auth.dto';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
-import type { StringValue } from 'ms';
 import { MailService } from 'src/mail/mail.service';
 import { AUTH_MESSAGES } from 'src/common/message/user/messages';
 import { RedisService } from 'src/redis/redis.service';
@@ -19,15 +18,26 @@ import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { UserStatus } from '@prisma/client';
 import { generateOtp } from '../common/utils/otp.util';
+import { TokenService } from './utils/token.service';
+import { SessionService } from './utils/session.service';
+import { RateLimitService } from './utils/rateLimit.service';
 
 @Injectable()
 export class AuthService {
+  private async failOtp(ip: string, otp: string): Promise<never> {
+    await this.rateLimitService.registerFail(ip, 'verify-otp');
+    await bcrypt.compare(otp, this.fakeOtpHash);
+    throw new BadRequestException('Invalid OTP');
+  }
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
     private readonly redisService: RedisService,
     private readonly config: ConfigService,
+    private readonly tokenService: TokenService,
+    private readonly sessionService: SessionService,
+    private readonly rateLimitService: RateLimitService,
   ) {}
   private readonly fakeRefreshHash =
     '$2b$10$1bQvB2m6n7k8fXl7qOQqW8j3kqYd3oWfEw5p8Y4j1r9q2s9tK0';
@@ -95,15 +105,13 @@ export class AuthService {
           const otpExpires = new Date(Date.now() + 5 * 60 * 1000);
           const hashedOtp = await bcrypt.hash(otp, 10);
 
-          await this.prisma.userSession.create({
-            data: {
-              userId: existingUser.id,
-              refreshFamilyId: randomUUID(),
-              hashedRefreshToken: '',
-              otpCode: hashedOtp,
-              otpExpiresAt: otpExpires,
-            },
-          });
+          await this.sessionService.create(
+            existingUser.id,
+            '',
+            randomUUID(),
+            undefined,
+            { code: hashedOtp, expiresAt: otpExpires },
+          );
 
           await this.mailService.sendOtp(existingUser.email, otp);
 
@@ -146,15 +154,14 @@ export class AuthService {
         });
 
         // 🔥 YANGI: Session yaratamiz OTP bilan
-        await tx.userSession.create({
-          data: {
-            userId: createdUser.id,
-            refreshFamilyId: randomUUID(), // vaqtinchalik
-            hashedRefreshToken: '', // hali login bo‘lmagan
-            otpCode: hashedOtp,
-            otpExpiresAt: otpExpires,
-          },
-        });
+        await this.sessionService.create(
+          createdUser.id,
+          '',
+          randomUUID(),
+          undefined,
+          { code: hashedOtp, expiresAt: otpExpires },
+          tx,
+        );
 
         return createdUser;
       });
@@ -195,47 +202,18 @@ export class AuthService {
     const normalizedEmail = email.toLowerCase().trim();
     const now = new Date();
 
-    // =========================
-    // 1️⃣ IP RATE LIMIT (REDIS)
-    // =========================
-    const ip =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.socket.remoteAddress ||
-      'unknown';
+    // 1️⃣ IP RATE LIMIT
+    const ip = await this.rateLimitService.extractIp(req); // ✅ await qo‘shildi
+    await this.rateLimitService.checkRate(ip, 'verify-otp');
 
-    const redis = this.redisService.redis;
-
-    const ipRateKey = `rate:verify-otp:ip:${ip}`;
-    const ipBlockKey = `block:verify-otp:ip:${ip}`;
-    const ipFailKey = `fail:verify-otp:ip:${ip}`;
-
-    // IP block check
-    const ipBlockedUntil = await redis.get(ipBlockKey);
-    if (ipBlockedUntil && Number(ipBlockedUntil) > Date.now()) {
+    // 🔥 Helper function: fail holatlari uchun
+    const failOtp = async () => {
+      await this.rateLimitService.registerFail(ip, 'verify-otp');
       await bcrypt.compare(otp, this.fakeOtpHash);
       throw new BadRequestException('Invalid OTP');
-    }
+    };
 
-    // Rate limit
-    const RATE_LIMIT = 15;
-    const RATE_WINDOW_SEC = 60;
-
-    const ipCount = await redis.incr(ipRateKey);
-    if (ipCount === 1) {
-      await redis.expire(ipRateKey, RATE_WINDOW_SEC);
-    }
-
-    if (ipCount > RATE_LIMIT) {
-      const ipBlockMs = 5 * 60 * 1000;
-      await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
-
-      await bcrypt.compare(otp, this.fakeOtpHash);
-      throw new BadRequestException('Invalid OTP');
-    }
-
-    // =========================
-    // 2️⃣ USER FIND
-    // =========================
+    // 2️⃣ USER TOPISH
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
       select: {
@@ -244,61 +222,25 @@ export class AuthService {
       },
     });
 
-    if (!user) {
-      await bcrypt.compare(otp, this.fakeOtpHash);
-      throw new BadRequestException('Invalid OTP');
-    }
+    if (!user) return failOtp();
+    if (user.status === UserStatus.ACTIVE) return failOtp();
 
-    // Agar allaqachon ACTIVE bo‘lsa
-    if (user.status === UserStatus.ACTIVE) {
-      await bcrypt.compare(otp, this.fakeOtpHash);
-      throw new BadRequestException('Invalid OTP');
-    }
+    // 3️⃣ LATEST OTP SESSION OLISH
+    const session = await this.sessionService.findLatestOtpSession(user.id);
+    if (!session) return failOtp();
 
-    // =========================
-    // 3️⃣ LATEST SESSION OLISH
-    // =========================
-    const session = await this.prisma.userSession.findFirst({
-      where: {
-        userId: user.id,
-        otpCode: { not: null },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        id: true,
-        otpCode: true,
-        otpExpiresAt: true,
-        otpAttempts: true,
-        otpBlockedUntil: true,
-      },
-    });
-
-    if (!session) {
-      await bcrypt.compare(otp, this.fakeOtpHash);
-      throw new BadRequestException('Invalid OTP');
-    }
-
-    // =========================
     // 4️⃣ OTP VALIDATION
-    // =========================
     const isExpired = !session.otpExpiresAt || session.otpExpiresAt < now;
-
     const isBlocked =
       !!session.otpBlockedUntil && session.otpBlockedUntil > now;
-
     const isMatch = await bcrypt.compare(
       otp,
       session.otpCode || this.fakeOtpHash,
     );
 
     if (!isMatch || isExpired || isBlocked) {
-      // =========================
-      // 5️⃣ ATTEMPT LOGIC (SESSION LEVEL)
-      // =========================
+      // 5️⃣ ATTEMPT LOGIC
       const newAttempts = (session.otpAttempts ?? 0) + 1;
-
       const getOtpLockMinutes = (attempts: number) => {
         if (attempts < 3) return 0;
         if (attempts === 3) return 10;
@@ -306,72 +248,36 @@ export class AuthService {
         if (attempts === 5) return 120;
         return 1440;
       };
-
       const lockMinutes = getOtpLockMinutes(newAttempts);
 
-      await this.prisma.userSession.update({
-        where: { id: session.id },
-        data: {
-          otpAttempts: newAttempts,
-          otpBlockedUntil:
-            lockMinutes > 0
-              ? new Date(Date.now() + lockMinutes * 60 * 1000)
-              : null,
-        },
-      });
+      await this.sessionService.incrementOtpAttempts(
+        session.id,
+        newAttempts,
+        lockMinutes,
+      );
 
-      // Redis fail tracking
-      const ipFails = await redis.incr(ipFailKey);
-      if (ipFails === 1) {
-        await redis.expire(ipFailKey, 15 * 60);
-      }
-
-      if (ipFails >= 10) {
-        const ipBlockMs = 10 * 60 * 1000;
-        await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
-      }
-
-      throw new BadRequestException('Invalid OTP');
+      return failOtp(); // Redis fail va fake compare bir joyda
     }
 
-    // =========================
-    // 6️⃣ SUCCESS
-    // =========================
+    // 6️⃣ SUCCESSFUL OTP
     await this.prisma.$transaction(async (tx) => {
-      const updatedSession = await tx.userSession.updateMany({
-        where: {
-          id: session.id,
-          otpCode: { not: null },
-          otpExpiresAt: { gt: new Date() },
-        },
-        data: {
-          otpCode: null,
-          otpExpiresAt: null,
-        },
-      });
-
+      const updatedSession = await this.sessionService.clearOtpData(session.id); // ✅ tx olib tashlandi
       if (updatedSession.count === 0) {
         throw new BadRequestException('OTP already used or expired');
       }
 
-      // User ACTIVE qilish
+      // User ACTIVE qilamiz
       await tx.user.update({
         where: { id: user.id },
-        data: {
-          status: UserStatus.ACTIVE,
-        },
+        data: { status: UserStatus.ACTIVE },
       });
 
-      // Session cleanup
-      await tx.userSession.deleteMany({
-        where: {
-          userId: user.id,
-          otpCode: { not: null },
-        },
-      });
+      // Oldingi OTP sessionlarni o‘chiramiz
+      await this.sessionService.deleteOtherOtpSessions(user.id); // ✅ tx olib tashlandi
     });
 
-    await redis.del(ipFailKey);
+    // 🔥 Redis fail reset
+    await this.rateLimitService.resetFails(ip, 'verify-otp');
 
     return { message: 'Email verified successfully' };
   }
@@ -381,40 +287,9 @@ export class AuthService {
     const email = dto.email.toLowerCase().trim();
 
     // ===== NEW (IP olish) =====
-    const ip =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.socket.remoteAddress ||
-      'unknown';
+    const ip = await this.rateLimitService.extractIp(req);
 
-    // ===== NEW (Redis keylar) =====
-    const redis = this.redisService.redis;
-
-    const ipRateKey = `rate:login:ip:${ip}`; // global rate
-    const ipBlockKey = `block:login:ip:${ip}`; // ip lock
-
-    // ===== NEW (1) IP BLOCK check =====
-    const ipBlockedUntil = await redis.get(ipBlockKey);
-    if (ipBlockedUntil && Number(ipBlockedUntil) > Date.now()) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // ===== NEW (2) GLOBAL RATE LIMIT (per IP) =====
-    // 20 request / 60 sec
-    const RATE_LIMIT = 20;
-    const RATE_WINDOW_SEC = 60;
-
-    const ipCount = await redis.incr(ipRateKey);
-    if (ipCount === 1) {
-      await redis.expire(ipRateKey, RATE_WINDOW_SEC);
-    }
-
-    if (ipCount > RATE_LIMIT) {
-      // 5 minut IP block
-      const ipBlockMs = 5 * 60 * 1000;
-      await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
-
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    await this.rateLimitService.checkRate(ip, 'login');
 
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -432,18 +307,7 @@ export class AuthService {
 
     // 1) USER YO‘Q bo‘lsa ham bir xil error qaytarish kerak
     if (!user) {
-      // ===== NEW (IP fail count) =====
-      const ipFailKey = `fail:login:ip:${ip}`;
-      const ipFails = await redis.incr(ipFailKey);
-
-      if (ipFails === 1) {
-        await redis.expire(ipFailKey, 15 * 60); // 15 min
-      }
-
-      if (ipFails >= 10) {
-        const ipBlockMs = 10 * 60 * 1000;
-        await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
-      }
+      await this.rateLimitService.registerFail(ip, 'login');
 
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -496,18 +360,7 @@ export class AuthService {
         },
       });
 
-      // ===== IP fail count =====
-      const ipFailKey = `fail:login:ip:${ip}`;
-      const ipFails = await redis.incr(ipFailKey);
-
-      if (ipFails === 1) {
-        await redis.expire(ipFailKey, 15 * 60);
-      }
-
-      if (ipFails >= 10) {
-        const ipBlockMs = 10 * 60 * 1000;
-        await redis.set(ipBlockKey, Date.now() + ipBlockMs, 'PX', ipBlockMs);
-      }
+      await this.rateLimitService.registerFail(ip, 'login');
 
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -522,10 +375,6 @@ export class AuthService {
         },
       });
     }
-
-    // ===== NEW (IP fail reset) =====
-    await redis.del(`fail:login:ip:${ip}`);
-
     // ===== Status check faqat password to‘g‘ri bo‘lgandan keyin =====
     if (user.status === UserStatus.PENDING) {
       throw new UnauthorizedException('Email verify required');
@@ -539,43 +388,24 @@ export class AuthService {
       throw new UnauthorizedException('Account banned');
     }
 
-    const jti = randomUUID();
-    const familyId = randomUUID(); // Yangi token family ID
+    await this.rateLimitService.resetFails(ip, 'login');
 
-    const accessToken = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, role: user.role, jti },
-      {
-        secret: this.config.getOrThrow<string>('ACCESS_TOKEN_KEY'),
-        expiresIn: this.config.getOrThrow<string>(
-          'ACCESS_TOKEN_TIME',
-        ) as StringValue,
-      },
-    );
+    const { accessToken, refreshToken, jti, familyId } =
+      await this.tokenService.generateTokens({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      });
 
-    const refreshToken = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, role: user.role, jti, familyId },
-      {
-        secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
-        expiresIn: this.config.getOrThrow<string>(
-          'REFRESH_TOKEN_TIME',
-        ) as StringValue,
-      },
-    );
-
-    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+    const hashedRefreshToken = await this.tokenService.hash(refreshToken);
 
     // Create new session
-    const createdSession = await this.prisma.userSession.create({
-      data: {
-        userId: user.id,
-        refreshFamilyId: familyId,
-        hashedRefreshToken,
-        deviceInfo: req.headers['user-agent'],
-        ipAddress: ip,
-        userAgent: req.headers['user-agent'],
-        lastLoginAt: new Date(),
-      },
-    });
+    const createdSession = await this.sessionService.create(
+      user.id,
+      hashedRefreshToken,
+      familyId,
+      req,
+    );
 
     // ===== NEW: refresh jti store (Redis) =====
     const refreshTtlSec = this.config.getOrThrow<number>(
@@ -638,21 +468,8 @@ export class AuthService {
     if (!tokenJti || !familyId) {
       throw new UnauthorizedException('Access denied');
     }
-
-    // =========================
     // 1️⃣ Session topamiz
-    // =========================
-    const session = await this.prisma.userSession.findFirst({
-      where: {
-        userId,
-        refreshFamilyId: familyId,
-      },
-      select: {
-        id: true,
-        hashedRefreshToken: true,
-        refreshFamilyId: true,
-      },
-    });
+    const session = await this.sessionService.findByFamily(userId, familyId);
 
     if (!session) {
       await bcrypt.compare(refreshToken, this.fakeRefreshHash);
@@ -665,7 +482,7 @@ export class AuthService {
     }
 
     // 🔐 REFRESH TOKEN INTEGRITY CHECK
-    const isValid = await bcrypt.compare(
+    const isValid = await this.sessionService.compare(
       refreshToken,
       session.hashedRefreshToken,
     );
@@ -674,9 +491,7 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    // =========================
     // 2️⃣ Redis-based lock (saqlanadi)
-    // =========================
     const lockKey = `lock:refresh:session:${session.id}`;
 
     const lockAcquired = await redis.set(lockKey, '1', 'EX', 10, 'NX');
@@ -686,23 +501,15 @@ export class AuthService {
     }
 
     try {
-      // =========================
       // 3️⃣ Reuse detection (Redis JTI)
-      // =========================
       const redisKey = `refresh:jti:session:${session.id}`;
 
       const redisJti = await redis.get(redisKey);
 
-      // if (redisJti) {
-      //   await redis.del(redisKey);
-      // }
-
       if (!redisJti || redisJti !== tokenJti) {
         // 🔥 reuse detected
         await bcrypt.compare(refreshToken, this.fakeRefreshHash);
-        await this.prisma.userSession.delete({
-          where: { id: session.id },
-        });
+        await this.sessionService.revoke(session.id);
 
         res.clearCookie('refreshToken', {
           httpOnly: true,
@@ -714,12 +521,7 @@ export class AuthService {
       // ✅ faqat valid bo‘lsa delete qilamiz
       await redis.del(redisKey);
 
-      // =========================
       // 4️⃣ Rotate JTI + Family
-      // =========================
-      const newJti = randomUUID();
-      const newFamilyId = session.refreshFamilyId;
-
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -730,9 +532,7 @@ export class AuthService {
       });
 
       if (!user) {
-        await this.prisma.userSession.delete({
-          where: { id: session.id },
-        });
+        await this.sessionService.revoke(session.id);
 
         res.clearCookie('refreshToken', {
           httpOnly: true,
@@ -742,47 +542,27 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
-      const newAccessToken = await this.jwtService.signAsync(
-        {
-          sub: user.id,
-          email: user.email,
-          role: user.role,
-          jti: newJti,
-        },
-        {
-          secret: this.config.getOrThrow<string>('ACCESS_TOKEN_KEY'),
-          expiresIn: this.config.getOrThrow<string>(
-            'ACCESS_TOKEN_TIME',
-          ) as StringValue,
-        },
+      const {
+        newAccessToken,
+        newRefreshToken,
+        hashedRefreshToken,
+        newJti,
+        familyId: newFamilyId,
+      } = await this.tokenService.rotateTokensWithPayload(
+        user,
+        session.refreshFamilyId!,
       );
 
-      const newRefreshToken = await this.jwtService.signAsync(
-        {
-          sub: userId,
-          jti: newJti,
-          familyId: newFamilyId,
-        },
-        {
-          secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
-          expiresIn: this.config.getOrThrow<string>(
-            'REFRESH_TOKEN_TIME',
-          ) as StringValue,
-        },
-      );
-
-      const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 10);
-
-      // =========================
       // 5️⃣ Session update
-      // =========================
       try {
         await this.prisma.$transaction(async (tx) => {
           // session update
-          await tx.userSession.update({
-            where: { id: session.id },
-            data: { hashedRefreshToken, refreshFamilyId: newFamilyId },
-          });
+          await this.sessionService.rotate(
+            session.id,
+            hashedRefreshToken,
+            newFamilyId,
+            tx,
+          );
 
           // Redis update
           await redis.set(
@@ -794,15 +574,13 @@ export class AuthService {
         });
       } catch {
         // agar xatolik bo‘lsa session revoke qilamiz
-        await this.prisma.userSession.delete({ where: { id: session.id } });
+        await this.sessionService.revoke(session.id);
         throw new InternalServerErrorException(
           'Failed to finalize refresh rotation',
         );
       }
 
-      // =========================
       // 7️⃣ Cookie update
-      // =========================
       res.cookie('refreshToken', newRefreshToken, {
         secure: this.config.get('NODE_ENV') === 'production',
         path: '/',
@@ -827,9 +605,7 @@ export class AuthService {
 
     let payload: any;
 
-    // =========================
     // 1️⃣ Token verification with try/catch
-    // =========================
     try {
       payload = await this.jwtService.verifyAsync(refreshToken, {
         secret: this.config.getOrThrow<string>('REFRESH_TOKEN_KEY'),
@@ -849,32 +625,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const session = await this.prisma.userSession.findFirst({
-      where: {
-        userId,
-        refreshFamilyId: familyId,
-      },
-    });
+    const session = await this.sessionService.findByFamily(userId, familyId);
 
     if (session) {
-      await redis.del(`refresh:jti:session:${session.id}`);
-
-      await this.prisma.userSession.delete({
-        where: { id: session.id },
-      });
+      await this.sessionService.revoke(session.id);
     }
-
-    if (payload.jti) {
-      const ttlSec = this.config.getOrThrow<number>('ACCESS_TOKEN_TTL_SEC');
-
-      await redis.set(
-        `blacklist:access:${payload.jti}`,
-        'revoked',
-        'EX',
-        ttlSec,
-      );
-    }
-
     return { success: true };
   }
 }
