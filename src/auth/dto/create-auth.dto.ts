@@ -69,7 +69,7 @@ export class CreateAuthDto {
   })
   @IsString()
   @MinLength(8)
-  @Matches(/^(?=.*[A-Za-z])(?=.*\d).+$/, {
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*#?&]).{8,}$/, {
     message: 'password must contain at least one letter and one number',
   })
   password!: string;
@@ -128,5 +128,5 @@ export class CreateAuthDto {
   @IsNumberString()
   birthDate!: string;
 
-  hashedRefreshToken!: string;
+  // hashedRefreshToken?: string;
 }

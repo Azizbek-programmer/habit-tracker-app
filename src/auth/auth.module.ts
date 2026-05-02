@@ -10,6 +10,7 @@ import { RedisService } from 'src/redis/redis.service';
 import { TokenService } from './utils/token.service';
 import { SessionService } from './utils/session.service';
 import { RateLimitService } from './utils/rateLimit.service';
+import { OtpService } from './utils/otp.service';
 
 @Module({
   imports: [PrismaModule, JwtModule.register({}), MailModule],
@@ -22,6 +23,7 @@ import { RateLimitService } from './utils/rateLimit.service';
     TokenService,
     SessionService,
     RateLimitService,
+    OtpService,
   ],
   exports: [AuthService, TokenService],
 })

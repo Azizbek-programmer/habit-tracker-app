@@ -6,7 +6,7 @@ import { randomInt } from 'crypto';
  * @returns string
  */
 export function generateOtp(length: number = 6): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz234567890';
 
   let otp = '';
 

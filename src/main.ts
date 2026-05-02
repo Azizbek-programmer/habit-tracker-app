@@ -5,28 +5,27 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { GlobalExceptionFilter } from './common/error/error.handler';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
-
   const logger = new Logger('Bootstrap');
 
   const port = process.env.PORT ?? 3000;
+  app.use(cookieParser());
+
+  app.useGlobalFilters(
+    new GlobalExceptionFilter(),
+    // new AllExceptionsFilter(app.get(WINSTON_MODULE_NEST_PROVIDER)),
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: false,
       transform: true,
+      forbidNonWhitelisted: true,
     }),
-  );
-
-  app.use(cookieParser());
-
-  app.useGlobalFilters(
-    new AllExceptionsFilter(app.get(WINSTON_MODULE_NEST_PROVIDER)),
   );
 
   const config = new DocumentBuilder()

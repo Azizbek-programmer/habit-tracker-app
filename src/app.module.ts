@@ -10,6 +10,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { RedisModule } from './redis/redis.module';
 import { LoggerModule } from './common/logging/logger.module';
+import { TaskModule } from './task/task.module';
 
 @Module({
   imports: [
@@ -39,7 +40,11 @@ import { LoggerModule } from './common/logging/logger.module';
 
         REFRESH_TOKEN_TTL_SEC: Joi.number().integer().min(60).required(),
 
-        ACCESS_TOKEN_TTL_SEC: Joi.number().integer().min(60).max(60 * 60).required(),
+        ACCESS_TOKEN_TTL_SEC: Joi.number()
+          .integer()
+          .min(60)
+          .max(60 * 60)
+          .required(),
 
         COOKIE_TIME: Joi.number().integer().min(1000).required(),
 
@@ -61,6 +66,7 @@ import { LoggerModule } from './common/logging/logger.module';
     AuthModule,
     RedisModule,
     LoggerModule,
+    TaskModule,
   ],
   controllers: [AppController],
   providers: [AppService],

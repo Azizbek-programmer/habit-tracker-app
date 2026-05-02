@@ -4,12 +4,14 @@ import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import type { StringValue } from 'ms';
+import { SessionService } from './session.service';
 
 @Injectable()
 export class TokenService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    public readonly sessionService: SessionService,
   ) {}
   async generateAccess(
     user: { id: string; email: string; role: string },

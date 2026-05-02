@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { EMAIL_MESSAGES } from 'src/common/message/email/messages';
+import { Lang } from 'src/common/types/lang.type';
 
 @Injectable()
 export class MailService {
@@ -21,26 +23,27 @@ export class MailService {
     });
   }
 
-  async sendOtp(email: string, otp: string) {
+  async sendOtp(email: string, otp: string, lang: Lang = 'uz') {
+    const t = EMAIL_MESSAGES.OTP[lang];
     await this.transporter.sendMail({
       from: `"My App" <${this.mailFrom}>`,
       to: email,
-      subject: '🔐 Your OTP Verification Code',
+      subject: t.subject,
       html: `
       <div style="font-family: Arial, sans-serif; background-color: #f4f6f8; padding: 30px;">
         <div style="max-width: 500px; margin: auto; background: #ffffff; border-radius: 10px; overflow: hidden;">
           
           <div style="background: #4f46e5; color: #ffffff; padding: 20px; text-align: center;">
-            <h1 style="margin: 0;">Email Verification</h1>
+            <h1 style="margin: 0;">${t.title}</h1>
           </div>
 
           <div style="padding: 30px; color: #333;">
             <p style="font-size: 16px;">
-              Assalomu alaykum 👋
+              ${t.greeting}
             </p>
 
             <p style="font-size: 15px;">
-              Sizning tasdiqlash kodingiz (OTP) quyida keltirilgan:
+              ${t.text1}
             </p>
 
             <div style="text-align: center; margin: 30px 0;">
@@ -59,11 +62,11 @@ export class MailService {
             </div>
 
             <p style="font-size: 14px; color: #555;">
-              ⏰ Ushbu kod <b>5 daqiqa</b> davomida amal qiladi.
+              ${t.expire}
             </p>
 
             <p style="font-size: 14px; color: #555;">
-              Agar bu so‘rovni siz yubormagan bo‘lsangiz, iltimos ushbu xabarni e’tiborsiz qoldiring.
+              ${t.ignore}
             </p>
 
             <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
@@ -74,7 +77,7 @@ export class MailService {
           </div>
         </div>
       </div>
-      `,
+    `,
     });
   }
 }
